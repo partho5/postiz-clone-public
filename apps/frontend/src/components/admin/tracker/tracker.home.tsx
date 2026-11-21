@@ -255,6 +255,7 @@ const DevicesTable: FC = () => {
   }, [debouncedSearch]);
 
   // The first page replaces the rows and a "Load more" page joins them. With no data yet, a first page clears the rows.
+  // A page re-run by SWR (focus revalidation) replaces its own devices, so none are listed twice.
   useEffect(() => {
     if (!data) {
       if (!cursor) {
@@ -262,7 +263,13 @@ const DevicesTable: FC = () => {
       }
       return;
     }
-    setRows((prev) => (cursor ? [...prev, ...data.items] : data.items));
+    setRows((prev) => {
+      if (!cursor) {
+        return data.items;
+      }
+      const loaded = new Set(data.items.map((row) => row.deviceId));
+      return [...prev.filter((row) => !loaded.has(row.deviceId)), ...data.items];
+    });
     setNextCursor(data.nextCursor);
   }, [data, cursor]);
 
