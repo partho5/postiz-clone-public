@@ -25,6 +25,7 @@ import { MediaRetentionActivity } from '@gitroom/orchestrator/activities/media.r
 import { MediaSweepActivity } from '@gitroom/orchestrator/activities/media.sweep.activity';
 import { ActivityLogActivity } from '@gitroom/orchestrator/activities/activity.log.activity';
 import { ContentPlanActivity } from '@gitroom/orchestrator/activities/content.plan.activity';
+import { TrackerCleanupActivity } from '@gitroom/orchestrator/activities/tracker.cleanup.activity';
 
 const activities = [
   PostActivity,
@@ -49,6 +50,7 @@ const activities = [
   MediaSweepActivity,
   ActivityLogActivity,
   ContentPlanActivity,
+  TrackerCleanupActivity,
 ];
 @Module({
   imports: [

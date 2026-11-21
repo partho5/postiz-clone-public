@@ -1,4 +1,4 @@
-// Activity tracker (api.activity-tracker): checks an uploaded batch activity by activity and stores what is valid.
+// Activity tracker (api.activity-tracker): checks an uploaded batch activity by activity, stores what is valid, and deletes the rows past retention.
 import { HttpException, Injectable } from '@nestjs/common';
 import { TrackerBatchDto } from '@gitroom/nestjs-libraries/dtos/activity-tracker/tracker.batch.dto';
 import {
@@ -6,6 +6,10 @@ import {
   cleanActivity,
   cleanEnvelope,
 } from '@gitroom/nestjs-libraries/database/prisma/activity-tracker/tracker.clean';
+import {
+  TRACKER_KEEP_LAST_ROWS,
+  TRACKER_RETENTION_DAYS,
+} from '@gitroom/nestjs-libraries/database/prisma/activity-tracker/tracker.config';
 import { TrackerRepository } from '@gitroom/nestjs-libraries/database/prisma/activity-tracker/tracker.repository';
 
 // The key of a session in the database: its device and the session id the app made.
@@ -358,5 +362,49 @@ export class TrackerService {
       throw new HttpException({ msg: 'Activity not found' }, 404);
     }
     return row;
+  }
+
+  // The daily retention run: deletes the rows older than TRACKER_RETENTION_DAYS for up to 500 devices, keeping each device's newest rows.
+  // Answers how many devices were handled and how many activity rows went.
+  async deleteExpired(now: Date = new Date()) {
+    const cutoff = new Date(now.getTime() - TRACKER_RETENTION_DAYS * DAY_MS);
+    const deviceIds = await this._tracker.devicesWithRowsBefore(cutoff);
+    let deleted = 0;
+    for (const deviceId of deviceIds) {
+      deleted += await this.deleteDeviceExpired(deviceId, cutoff);
+    }
+    return { devices: deviceIds.length, deleted };
+  }
+
+  // Deletes one device's old activities, but never its newest TRACKER_KEEP_LAST_ROWS, then its sessions left with no activities.
+  // Answers how many activities went; a device with that many rows or fewer keeps all of them.
+  private async deleteDeviceExpired(deviceId: string, cutoff: Date) {
+    const keepFrom = await this._tracker.nthNewestStartedAt(
+      deviceId,
+      TRACKER_KEEP_LAST_ROWS
+    );
+    if (keepFrom === null) {
+      return 0;
+    }
+    const before = new Date(Math.min(cutoff.getTime(), keepFrom.getTime()));
+    const deleted = await this._tracker.deleteActivitiesBefore(
+      deviceId,
+      before
+    );
+    await this.deleteOrphanSessions(deviceId, cutoff);
+    return deleted;
+  }
+
+  // Deletes the device's sessions that ended before the cutoff and have no activities left.
+  private async deleteOrphanSessions(deviceId: string, cutoff: Date) {
+    const keys = await this._tracker.sessionKeysEndedBefore(deviceId, cutoff);
+    if (!keys.length) {
+      return;
+    }
+    const used = new Set(await this._tracker.sessionKeysWithActivities(keys));
+    const orphans = keys.filter((key) => !used.has(key));
+    if (orphans.length) {
+      await this._tracker.deleteSessions(orphans);
+    }
   }
 }

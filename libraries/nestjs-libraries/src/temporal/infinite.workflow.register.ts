@@ -28,6 +28,7 @@ export class InfiniteWorkflowRegister implements OnModuleInit {
       await this.startAiEditAssetPurgeWorkflow();
       await this.startAiEditTracePurgeWorkflow();
       await this.startContentPlanTickWorkflow();
+      await this.startTrackerCleanupWorkflow();
     }
   }
 
@@ -203,6 +204,25 @@ export class InfiniteWorkflowRegister implements OnModuleInit {
     } catch (err) {
       if (!(err instanceof WorkflowExecutionAlreadyStartedError)) {
         console.error('content plan: tick workflow did not start', err);
+      }
+    }
+  }
+
+  // Starts the daily deletion of activity tracker rows past their retention, keeping each device's newest rows; one already running is left alone.
+  private async startTrackerCleanupWorkflow() {
+    try {
+      await this._temporalService.client
+        ?.getRawClient()
+        ?.workflow?.start('trackerCleanupWorkflow', {
+          workflowId: 'activity-tracker-cleanup-workflow',
+          taskQueue: 'main',
+        });
+    } catch (err) {
+      if (!(err instanceof WorkflowExecutionAlreadyStartedError)) {
+        console.error(
+          'api: activity tracker cleanup workflow did not start',
+          err
+        );
       }
     }
   }

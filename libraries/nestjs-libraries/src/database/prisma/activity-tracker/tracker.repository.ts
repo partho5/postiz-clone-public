@@ -348,4 +348,60 @@ export class TrackerRepository {
   async findActivity(id: string) {
     return this._activity.model.trackerActivity.findUnique({ where: { id } });
   }
+
+  // The ids of up to 500 devices that have an activity started before `cutoff`; the rest wait for the next run.
+  async devicesWithRowsBefore(cutoff: Date) {
+    const rows = await this._activity.model.trackerActivity.findMany({
+      where: { startedAt: { lt: cutoff } },
+      distinct: ['deviceId'],
+      select: { deviceId: true },
+      take: 500,
+    });
+    return rows.map((row) => row.deviceId);
+  }
+
+  // The start time of the n-th newest activity of one device; null when the device has fewer than n activities.
+  async nthNewestStartedAt(deviceId: string, n: number) {
+    const row = await this._activity.model.trackerActivity.findFirst({
+      where: { deviceId },
+      orderBy: [{ startedAt: 'desc' }, { seq: 'desc' }],
+      skip: n - 1,
+      select: { startedAt: true },
+    });
+    return row?.startedAt ?? null;
+  }
+
+  // Deletes one device's activities that started before `before`; answers how many went.
+  async deleteActivitiesBefore(deviceId: string, before: Date) {
+    const { count } = await this._activity.model.trackerActivity.deleteMany({
+      where: { deviceId, startedAt: { lt: before } },
+    });
+    return count;
+  }
+
+  // The keys of one device's sessions that ended before `before`.
+  async sessionKeysEndedBefore(deviceId: string, before: Date) {
+    const rows = await this._session.model.trackerSession.findMany({
+      where: { deviceId, endedAt: { lt: before } },
+      select: { key: true },
+    });
+    return rows.map((row) => row.key);
+  }
+
+  // The keys, out of `keys`, of the sessions that still have at least one activity.
+  async sessionKeysWithActivities(keys: string[]) {
+    const rows = await this._activity.model.trackerActivity.findMany({
+      where: { sessionKey: { in: keys } },
+      distinct: ['sessionKey'],
+      select: { sessionKey: true },
+    });
+    return rows.map((row) => row.sessionKey);
+  }
+
+  // Deletes the sessions with these keys.
+  async deleteSessions(keys: string[]) {
+    await this._session.model.trackerSession.deleteMany({
+      where: { key: { in: keys } },
+    });
+  }
 }
