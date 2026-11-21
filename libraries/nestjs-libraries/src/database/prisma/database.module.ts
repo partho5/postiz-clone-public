@@ -126,6 +126,8 @@ import { AiVideoEditsRepository } from '@gitroom/nestjs-libraries/database/prism
 import { AiVideoEditTraceRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edit.trace.repository';
 import { TraceService } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edit.trace.service';
 import { AiVideoEditsService } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edits.service';
+import { TrackerRepository } from '@gitroom/nestjs-libraries/database/prisma/activity-tracker/tracker.repository';
+import { TrackerService } from '@gitroom/nestjs-libraries/database/prisma/activity-tracker/tracker.service';
 
 @Global()
 @Module({
@@ -264,6 +266,8 @@ import { AiVideoEditsService } from '@gitroom/nestjs-libraries/database/prisma/a
     AiVideoEditTraceRepository,
     TraceService,
     AiVideoEditsService,
+    TrackerRepository,
+    TrackerService,
   ],
   get exports() {
     return this.providers;

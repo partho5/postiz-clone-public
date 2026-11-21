@@ -80,6 +80,7 @@ import { BrandsController } from '@gitroom/backend/api/routes/brands.controller'
 import { ContentPlanController } from '@gitroom/backend/api/routes/content.plan.controller';
 import { AutoPublishController } from '@gitroom/backend/api/routes/auto.publish.controller';
 import { AppCredentialsController } from '@gitroom/backend/api/routes/app.credentials.controller';
+import { TrackerController } from '@gitroom/backend/api/routes/tracker.controller';
 import { PaypalProvider } from '@gitroom/nestjs-libraries/services/payment/providers/paypal.provider';
 import { IdempotencyMiddleware } from '@gitroom/backend/services/idempotency/idempotency.middleware';
 
@@ -145,6 +146,7 @@ const authenticatedController = [
         MonitorController,
         EnterpriseController,
         NoAuthIntegrationsController,
+        TrackerController,
         OAuthController,
         MediaWidgetController,
         ClippingWidgetController,

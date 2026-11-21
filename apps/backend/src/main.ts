@@ -88,6 +88,11 @@ async function start() {
     }
   );
 
+  // The phone's activity batch (api.activity-tracker): up to 50 activities with error stacks; gzip on the wire.
+  app.use('/tracker/batches', (req: any, res: any, next: any) => {
+    json({ limit: '1mb' })(req, res, next);
+  });
+
   app.use(cookieParser());
   app.use(compression());
   app.useGlobalFilters(new SubscriptionExceptionFilter());
