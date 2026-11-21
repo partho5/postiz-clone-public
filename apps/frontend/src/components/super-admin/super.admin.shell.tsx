@@ -16,6 +16,7 @@ const useSuperAdminTabs = () => {
     { path: '/super-admin', name: t('overview', 'Overview') },
     { path: '/super-admin/stats', name: t('view_stats', 'View Stats') },
     { path: '/super-admin/errors', name: t('view_errors', 'View Errors') },
+    { path: '/super-admin/activity', name: t('view_activity', 'Activity') },
     { path: '/super-admin/prompts', name: t('view_prompts', 'View Prompts') },
   ];
 };
