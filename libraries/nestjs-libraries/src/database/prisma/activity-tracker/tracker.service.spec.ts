@@ -135,6 +135,14 @@ describe('api.activity-tracker: cleanActivity', () => {
     expect(cleaned?.description).toHaveLength(120);
   });
 
+  it('removes NUL characters from text, which the database would refuse', () => {
+    const cleaned = cleanActivity(
+      activity(1, { description: 'edit\u0000 topics' }),
+      NOW
+    );
+    expect(cleaned?.description).toBe('edit topics');
+  });
+
   it('cuts an error stack of 20 000 characters to 8000 and keeps at most 5 causes', () => {
     const cleaned = cleanActivity(
       activity(1, {

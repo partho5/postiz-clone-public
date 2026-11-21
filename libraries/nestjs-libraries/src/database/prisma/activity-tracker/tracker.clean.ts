@@ -69,12 +69,17 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const isIntFrom = (v: unknown, min: number): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= MAX_INT;
 
-// The text trimmed and cut to `max` characters; null when it is not a string or is blank.
+// The text with NUL characters removed, trimmed and cut to `max` characters; null when it is not a string or is blank.
 export function cut(v: unknown, max: number): string | null {
-  if (typeof v !== 'string' || !v.trim()) {
+  if (typeof v !== 'string') {
     return null;
   }
-  return [...v.trim()].slice(0, max).join('');
+  // Postgres text and jsonb refuse a NUL character, which would fail the whole batch's insert, so it is dropped here.
+  const text = v.split('\u0000').join('').trim();
+  if (!text) {
+    return null;
+  }
+  return [...text].slice(0, max).join('');
 }
 
 // The activity kind when it is one of the two the contract allows, else null.
