@@ -195,11 +195,11 @@ export class TrackerRepository {
     };
   }
 
-  // The sessions from `since` on, counted by the screen they ended on.
+  // The sessions from `since` on, counted by the screen they ended on. Sessions with no screen are left out: they have no drop-off point.
   async dropOffCounts(since: Date) {
     return this._session.model.trackerSession.groupBy({
       by: ['lastScreen'],
-      where: { startedAt: { gte: since } },
+      where: { startedAt: { gte: since }, lastScreen: { not: null } },
       _count: { _all: true },
     });
   }
