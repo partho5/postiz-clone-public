@@ -1,5 +1,8 @@
 // Activity tracker (api.activity-tracker): the cleaning rules and the batch store, on hand-made repositories with no database.
 import { HttpException } from '@nestjs/common';
+import { User } from '@prisma/client';
+import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { AdminTrackerController } from '@gitroom/backend/api/routes/admin.tracker.controller';
 import { TrackerBatchDto } from '@gitroom/nestjs-libraries/dtos/activity-tracker/tracker.batch.dto';
 import {
   cleanActivity,
@@ -319,4 +322,168 @@ describe('api.activity-tracker: store', () => {
       })
     );
   });
+});
+
+// Hand-made Prisma methods of one table for the read side: each answers an empty result unless `answers` overrides it.
+const emptyTable = (answers: Record<string, jest.Mock> = {}) => ({
+  count: jest.fn(async () => 0),
+  groupBy: jest.fn(async () => []),
+  findMany: jest.fn(async () => []),
+  findFirst: jest.fn(async () => null),
+  findUnique: jest.fn(async () => null),
+  ...answers,
+});
+
+// A read-side service on hand-made tables. The repository is the real one, so the queries it builds are the ones checked here.
+const readService = (
+  tables: {
+    device?: Record<string, jest.Mock>;
+    session?: Record<string, jest.Mock>;
+    activity?: Record<string, jest.Mock>;
+  } = {}
+) => {
+  const device = emptyTable(tables.device);
+  const session = emptyTable(tables.session);
+  const activity = emptyTable(tables.activity);
+  const repo = new TrackerRepository(
+    {
+      model: { trackerDevice: device },
+    } as unknown as PrismaRepository<'trackerDevice'>,
+    {
+      model: { trackerSession: session },
+    } as unknown as PrismaRepository<'trackerSession'>,
+    {
+      model: { trackerActivity: activity },
+    } as unknown as PrismaRepository<'trackerActivity'>,
+    { model: { user: emptyTable() } } as unknown as PrismaRepository<'user'>
+  );
+  return { service: new TrackerService(repo), device, session, activity };
+};
+
+describe('api.activity-tracker: read API', () => {
+  it('gives each timeline row its gap in ms from the row before, null for the first', async () => {
+    const { service } = readService({
+      session: {
+        findUnique: jest.fn(async () => ({ key: `${DEVICE}:sess1` })),
+      },
+      activity: {
+        findMany: jest.fn(async () => [
+          { id: uuidOf(1), startedAt: new Date(T) },
+          { id: uuidOf(2), startedAt: new Date(T + 300) },
+          { id: uuidOf(3), startedAt: new Date(T + 3900) },
+        ]),
+      },
+    });
+    const { items } = await service.timeline(`${DEVICE}:sess1`);
+    expect(items.map((item) => item.gapMs)).toEqual([null, 300, 3600]);
+  });
+
+  it('reads the devices last seen before the cursor', async () => {
+    const cursor = new Date(NOW - DAY).toISOString();
+    const { service, device } = readService();
+    await service.devices({ cursor });
+    expect(device.findMany.mock.calls[0][0].where).toMatchObject({
+      lastSeenAt: { lt: new Date(cursor) },
+    });
+  });
+
+  it.each([
+    ['0', 1],
+    ['500', 90],
+    ['abc', 7],
+  ])('counts back %s days as %i after clamping', async (days, expected) => {
+    const { service } = readService();
+    const { since } = await service.overview(days);
+    expect(Math.round((Date.now() - Date.parse(since)) / DAY)).toBe(expected);
+  });
+
+  it('counts the devices of each feature from the device rows and ranks by devices', async () => {
+    const { service } = readService({
+      activity: {
+        groupBy: jest.fn(async ({ by }: { by: string[] }) => {
+          const fields = by.join(',');
+          if (fields === 'name,description') {
+            return [
+              {
+                name: 'click',
+                description: 'edit topics',
+                _count: { _all: 5 },
+              },
+              {
+                name: 'toggle',
+                description: 'ai captions',
+                _count: { _all: 9 },
+              },
+              { name: 'click', description: null, _count: { _all: 1 } },
+            ];
+          }
+          if (fields === 'name,description,deviceId') {
+            return [
+              {
+                name: 'click',
+                description: 'edit topics',
+                deviceId: 'A',
+                _count: { _all: 2 },
+              },
+              {
+                name: 'click',
+                description: 'edit topics',
+                deviceId: 'B',
+                _count: { _all: 3 },
+              },
+              {
+                name: 'toggle',
+                description: 'ai captions',
+                deviceId: 'A',
+                _count: { _all: 9 },
+              },
+              {
+                name: 'click',
+                description: null,
+                deviceId: 'C',
+                _count: { _all: 1 },
+              },
+            ];
+          }
+          return [];
+        }),
+      },
+    });
+    const { topFeatures } = await service.overview('7');
+    expect(topFeatures).toEqual([
+      { name: 'click', description: 'edit topics', devices: 2, count: 5 },
+      { name: 'toggle', description: 'ai captions', devices: 1, count: 9 },
+      { name: 'click', description: null, devices: 1, count: 1 },
+    ]);
+  });
+});
+
+describe('api.activity-tracker: admin read API access', () => {
+  const service = {
+    overview: jest.fn(),
+    devices: jest.fn(),
+    sessions: jest.fn(),
+    timeline: jest.fn(),
+    activity: jest.fn(),
+  };
+  const controller = new AdminTrackerController(
+    service as unknown as TrackerService
+  );
+  const notAdmin = { isSuperAdmin: false } as User;
+
+  it.each([
+    ['overview', () => controller.overview(notAdmin)],
+    ['devices', () => controller.devices(notAdmin)],
+    ['sessions', () => controller.sessions(notAdmin)],
+    ['timeline', () => controller.timeline(notAdmin)],
+    ['activity', () => controller.activity(notAdmin, uuidOf(1))],
+  ])(
+    'answers 403 from %s to a user who is not a super admin',
+    async (_, call) => {
+      const error = await call().catch((err) => err);
+      expect(error).toBeInstanceOf(HttpException);
+      expect((error as HttpException).getStatus()).toBe(403);
+      Object.values(service).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+    }
+  );
 });

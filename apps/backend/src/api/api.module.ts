@@ -53,6 +53,7 @@ import {
 import { AnnouncementsController } from '@gitroom/backend/api/routes/announcements.controller';
 import { AdminController } from '@gitroom/backend/api/routes/admin.controller';
 import { AdminAiEditsController } from '@gitroom/backend/api/routes/admin.ai.edits.controller';
+import { AdminTrackerController } from '@gitroom/backend/api/routes/admin.tracker.controller';
 import { AdminPromptsController } from '@gitroom/backend/api/routes/admin.prompts.controller';
 import { PromptBookController } from '@gitroom/backend/api/routes/prompt.book.controller';
 import { AiCaptionsController } from '@gitroom/backend/api/routes/ai.captions.controller';
@@ -108,6 +109,7 @@ const authenticatedController = [
   AnnouncementsController,
   AdminController,
   AdminAiEditsController,
+  AdminTrackerController,
   AdminPromptsController,
   PromptBookController,
   AiCaptionsController,

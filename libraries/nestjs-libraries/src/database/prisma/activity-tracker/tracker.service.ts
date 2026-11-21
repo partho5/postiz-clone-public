@@ -15,6 +15,54 @@ const sessionKeyOf = (deviceId: string, session: string) =>
 // Whether an activity was cleaned to a row, as opposed to dropped.
 const isClean = (a: CleanActivity | null): a is CleanActivity => a !== null;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_DAYS = 90;
+const DEFAULT_DAYS = 7;
+const MAX_LIMIT = 100;
+const DEFAULT_DEVICE_LIMIT = 50;
+const DEFAULT_SESSION_LIMIT = 30;
+// The most activities one replay returns; a longer session is cut after this many.
+const TIMELINE_MAX = 2000;
+const TOP_FEATURES = 30;
+const DROP_OFF = 15;
+
+// The whole number in a query string, or `fallback` when it is missing or not a number.
+const wholeOr = (raw: string | undefined, fallback: number) => {
+  const n =
+    raw === undefined || raw.trim() === '' ? NaN : Math.trunc(Number(raw));
+  return Number.isFinite(n) ? n : fallback;
+};
+
+// The period of the overview in days: 1 to 90, 7 when the query string is not a number.
+const clampDays = (raw?: string) =>
+  Math.min(MAX_DAYS, Math.max(1, wholeOr(raw, DEFAULT_DAYS)));
+
+// A page size from a query string: 1 to 100, `fallback` when the query string is not a number.
+const clampLimit = (raw: string | undefined, fallback: number) =>
+  Math.min(MAX_LIMIT, Math.max(1, wholeOr(raw, fallback)));
+
+// A cursor from a query string as a date, or undefined when it is missing or is not a date.
+const cursorOf = (raw?: string) => {
+  if (!raw) {
+    return undefined;
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
+// The key of a group made of these parts, so the groups of two queries can be matched.
+const keyOf = (...parts: unknown[]) => JSON.stringify(parts);
+
+// How many rows each key has. Each row of a groupBy by device is one device, so this counts the devices of each key.
+const devicesPerKey = <T>(rows: T[], keyOfRow: (row: T) => string) => {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = keyOfRow(row);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+};
+
 // Receives the repository that stores devices, sessions and activities.
 @Injectable()
 export class TrackerService {
@@ -122,5 +170,193 @@ export class TrackerService {
       appBuild:
         withBuild[withBuild.length - 1]?.appBuild ?? existing?.appBuild ?? null,
     });
+  }
+
+  // The super admin's overview of the last `days` days: the totals, the top features, where sessions end, how they start and the top errors.
+  async overview(days?: string) {
+    const since = new Date(Date.now() - clampDays(days) * DAY_MS);
+    const [
+      devices,
+      activeDevices,
+      sessions,
+      activities,
+      errors,
+      topFeatures,
+      dropOff,
+      entrySources,
+      topErrors,
+    ] = await Promise.all([
+      this._tracker.countDevices(),
+      this._tracker.countActiveDevices(since),
+      this._tracker.countSessions(since),
+      this._tracker.countActivities('activity', since),
+      this._tracker.countActivities('error', since),
+      this.topFeatures(since),
+      this.dropOff(since),
+      this.entrySources(since),
+      this.topErrors(since),
+    ]);
+    return {
+      since: since.toISOString(),
+      devices,
+      activeDevices,
+      sessions,
+      activities,
+      errors,
+      topFeatures,
+      dropOff,
+      entrySources,
+      topErrors,
+    };
+  }
+
+  // The features ranked by how many devices used them, then by how many times. The candidates are the 100 most used.
+  private async topFeatures(since: Date) {
+    const [counts, devices] = await Promise.all([
+      this._tracker.featureCounts(since),
+      this._tracker.featureDevices(since),
+    ]);
+    const devicesOf = devicesPerKey(devices, (row) =>
+      keyOf(row.name, row.description)
+    );
+    return counts
+      .map((row) => ({
+        name: row.name,
+        description: row.description,
+        devices: devicesOf.get(keyOf(row.name, row.description)) ?? 0,
+        count: row._count._all,
+      }))
+      .sort((a, b) => b.devices - a.devices || b.count - a.count)
+      .slice(0, TOP_FEATURES);
+  }
+
+  // The screens where sessions ended, most sessions first.
+  private async dropOff(since: Date) {
+    const rows = await this._tracker.dropOffCounts(since);
+    return rows
+      .map((row) => ({ screen: row.lastScreen, sessions: row._count._all }))
+      .sort((a, b) => b.sessions - a.sessions)
+      .slice(0, DROP_OFF);
+  }
+
+  // How the sessions started (the source of their first app open or foreground), most sessions first.
+  private async entrySources(since: Date) {
+    const rows = await this._tracker.entrySourceCounts(since);
+    return rows
+      .map((row) => ({ source: row.entrySource, sessions: row._count._all }))
+      .sort((a, b) => b.sessions - a.sessions);
+  }
+
+  // The error groups with how many devices hit each, when each last happened, and the id of its newest error to open the replay at.
+  private async topErrors(since: Date) {
+    const [groups, devices] = await Promise.all([
+      this._tracker.errorGroups(since),
+      this._tracker.errorDevices(since),
+    ]);
+    const devicesOf = devicesPerKey(devices, (row) =>
+      keyOf(row.errorType, row.screen)
+    );
+    return Promise.all(
+      groups.map(async (group) => ({
+        errorType: group.errorType,
+        screen: group.screen,
+        count: group._count._all,
+        devices: devicesOf.get(keyOf(group.errorType, group.screen)) ?? 0,
+        lastAt: group._max.startedAt,
+        sampleId: await this._tracker.newestErrorId(
+          since,
+          group.errorType,
+          group.screen
+        ),
+      }))
+    );
+  }
+
+  // One page of the devices, newest first, filtered by `q` (email or device id start) and `hasErrors`. `cursor` is the lastSeenAt to continue from.
+  async devices(query: {
+    q?: string;
+    hasErrors?: string;
+    cursor?: string;
+    limit?: string;
+  }) {
+    const limit = clampLimit(query.limit, DEFAULT_DEVICE_LIMIT);
+    const page = await this._tracker.listDevices({
+      q: query.q?.trim() || undefined,
+      hasErrors: query.hasErrors === 'true',
+      cursor: cursorOf(query.cursor),
+      take: limit + 1,
+    });
+    const items = page.slice(0, limit);
+    return {
+      items,
+      nextCursor:
+        page.length > limit
+          ? items[items.length - 1].lastSeenAt.toISOString()
+          : null,
+    };
+  }
+
+  // One page of a device's sessions, newest first, each with its duration. Unknown device: 404.
+  async sessions(query: {
+    deviceId?: string;
+    cursor?: string;
+    limit?: string;
+  }) {
+    if (!query.deviceId) {
+      throw new HttpException({ msg: 'deviceId is required' }, 400);
+    }
+    const device = await this._tracker.findDevice(query.deviceId);
+    if (!device) {
+      throw new HttpException({ msg: 'Device not found' }, 404);
+    }
+    const limit = clampLimit(query.limit, DEFAULT_SESSION_LIMIT);
+    const page = await this._tracker.listSessions({
+      deviceId: query.deviceId,
+      cursor: cursorOf(query.cursor),
+      take: limit + 1,
+    });
+    const items = page.slice(0, limit).map((session) => ({
+      ...session,
+      durationMs: session.endedAt.getTime() - session.startedAt.getTime(),
+    }));
+    return {
+      device,
+      items,
+      nextCursor:
+        page.length > limit
+          ? items[items.length - 1].startedAt.toISOString()
+          : null,
+    };
+  }
+
+  // One session's activities in replay order, each with the gap in ms from the one before (null for the first). Unknown session: 404.
+  async timeline(sessionKey?: string) {
+    if (!sessionKey) {
+      throw new HttpException({ msg: 'sessionKey is required' }, 400);
+    }
+    const session = await this._tracker.findSession(sessionKey);
+    if (!session) {
+      throw new HttpException({ msg: 'Session not found' }, 404);
+    }
+    const rows = await this._tracker.listTimeline(sessionKey, TIMELINE_MAX);
+    return {
+      session,
+      items: rows.map((row, i) => ({
+        ...row,
+        gapMs:
+          i === 0
+            ? null
+            : row.startedAt.getTime() - rows[i - 1].startedAt.getTime(),
+      })),
+    };
+  }
+
+  // One activity with every column, for the error detail panel. Unknown id: 404.
+  async activity(id: string) {
+    const row = await this._tracker.findActivity(id);
+    if (!row) {
+      throw new HttpException({ msg: 'Activity not found' }, 404);
+    }
+    return row;
   }
 }
