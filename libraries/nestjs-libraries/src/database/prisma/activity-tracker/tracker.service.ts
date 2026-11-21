@@ -20,6 +20,10 @@ const sessionKeyOf = (deviceId: string, session: string) =>
 const isClean = (a: CleanActivity | null): a is CleanActivity => a !== null;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Devices per page of the retention run. A device with 300 rows or fewer keeps them all, so it matches every run;
+// the page cap bounds one run's time and database load, and a run that reaches it starts over from the first device.
+const DEVICE_PAGE = 500;
+const MAX_DEVICE_PAGES = 20;
 const MAX_DAYS = 90;
 const DEFAULT_DAYS = 7;
 const MAX_LIMIT = 100;
@@ -364,16 +368,29 @@ export class TrackerService {
     return row;
   }
 
-  // The daily retention run: deletes the rows older than TRACKER_RETENTION_DAYS for up to 500 devices, keeping each device's newest rows.
-  // Answers how many devices were handled and how many activity rows went.
+  // The daily retention run: deletes the rows older than TRACKER_RETENTION_DAYS for every device with old rows, keeping each device's newest rows.
+  // Pages through the devices by deviceId, DEVICE_PAGE at a time, up to MAX_DEVICE_PAGES pages. Answers how many devices were handled and how many activity rows went.
   async deleteExpired(now: Date = new Date()) {
     const cutoff = new Date(now.getTime() - TRACKER_RETENTION_DAYS * DAY_MS);
-    const deviceIds = await this._tracker.devicesWithRowsBefore(cutoff);
+    let devices = 0;
     let deleted = 0;
-    for (const deviceId of deviceIds) {
-      deleted += await this.deleteDeviceExpired(deviceId, cutoff);
+    let after: string | undefined;
+    for (let page = 0; page < MAX_DEVICE_PAGES; page++) {
+      const deviceIds = await this._tracker.devicesWithRowsBefore({
+        cutoff,
+        after,
+        take: DEVICE_PAGE,
+      });
+      for (const deviceId of deviceIds) {
+        deleted += await this.deleteDeviceExpired(deviceId, cutoff);
+      }
+      devices += deviceIds.length;
+      if (deviceIds.length < DEVICE_PAGE) {
+        break;
+      }
+      after = deviceIds[deviceIds.length - 1];
     }
-    return { devices: deviceIds.length, deleted };
+    return { devices, deleted };
   }
 
   // Deletes one device's old activities, but never its newest TRACKER_KEEP_LAST_ROWS, then its sessions left with no activities.

@@ -495,10 +495,25 @@ const retentionRepository = (
   rows: Record<string, Date[]>,
   sessions: { keys?: string[]; withActivities?: string[] } = {}
 ) => {
-  const devicesWithRowsBefore = jest.fn(async (cutoff: Date) =>
-    Object.keys(rows).filter((deviceId) =>
-      rows[deviceId].some((at) => at.getTime() < cutoff.getTime())
-    )
+  // Like the real query: the devices in deviceId order, after the cursor, that have a row before the cutoff, up to `take`.
+  const devicesWithRowsBefore = jest.fn(
+    async ({
+      cutoff,
+      after,
+      take,
+    }: {
+      cutoff: Date;
+      after?: string;
+      take: number;
+    }) =>
+      Object.keys(rows)
+        .sort()
+        .filter(
+          (deviceId) =>
+            (after === undefined || deviceId > after) &&
+            rows[deviceId].some((at) => at.getTime() < cutoff.getTime())
+        )
+        .slice(0, take)
   );
   const nthNewestStartedAt = jest.fn(
     async (deviceId: string, n: number) =>
@@ -530,6 +545,7 @@ const retentionRepository = (
   };
   return {
     service: new TrackerService(repo as unknown as TrackerRepository),
+    devicesWithRowsBefore,
     nthNewestStartedAt,
     deleteActivitiesBefore,
     deleteSessions,
@@ -575,6 +591,30 @@ describe('api.activity-tracker: retention', () => {
     expect(nthNewestStartedAt).toHaveBeenCalledWith(DEVICE, 300);
     expect(deleteActivitiesBefore).not.toHaveBeenCalled();
     expect(result).toEqual({ devices: 1, deleted: 0 });
+  });
+
+  it('pages on past a full page of devices that need no delete, so a device on the next page is cleaned', async () => {
+    // 500 devices with one old row each (nothing to delete), then one device with 320 rows whose last 20 are past retention.
+    const rows: Record<string, Date[]> = {};
+    for (let i = 0; i < 500; i++) {
+      rows[`dev-${i.toString().padStart(3, '0')}`] = [daysAgo(120)];
+    }
+    rows['dev-500'] = Array.from({ length: 320 }, (_, i) => daysAgo(100 + i));
+    const { service, devicesWithRowsBefore, deleteActivitiesBefore } =
+      retentionRepository(rows);
+    const result = await service.deleteExpired(now);
+    expect(devicesWithRowsBefore).toHaveBeenCalledTimes(2);
+    expect(devicesWithRowsBefore.mock.calls[1][0]).toEqual({
+      cutoff,
+      after: 'dev-499',
+      take: 500,
+    });
+    expect(deleteActivitiesBefore).toHaveBeenCalledTimes(1);
+    expect(deleteActivitiesBefore).toHaveBeenCalledWith(
+      'dev-500',
+      daysAgo(399)
+    );
+    expect(result).toEqual({ devices: 501, deleted: 20 });
   });
 
   it('deletes the sessions that ended before the cutoff and have no activities left, keeping the rest', async () => {

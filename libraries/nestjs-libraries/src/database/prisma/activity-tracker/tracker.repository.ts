@@ -349,13 +349,21 @@ export class TrackerRepository {
     return this._activity.model.trackerActivity.findUnique({ where: { id } });
   }
 
-  // The ids of up to 500 devices that have an activity started before `cutoff`; the rest wait for the next run.
-  async devicesWithRowsBefore(cutoff: Date) {
+  // The ids of up to `take` devices that have an activity started before `cutoff`, in deviceId order; `after` starts the page after that id.
+  async devicesWithRowsBefore(params: {
+    cutoff: Date;
+    after?: string;
+    take: number;
+  }) {
     const rows = await this._activity.model.trackerActivity.findMany({
-      where: { startedAt: { lt: cutoff } },
+      where: {
+        startedAt: { lt: params.cutoff },
+        ...(params.after ? { deviceId: { gt: params.after } } : {}),
+      },
       distinct: ['deviceId'],
+      orderBy: { deviceId: 'asc' },
       select: { deviceId: true },
-      take: 500,
+      take: params.take,
     });
     return rows.map((row) => row.deviceId);
   }
