@@ -37,11 +37,14 @@ export class MuseChatService {
     return !!process.env.META_MUSE_API_KEY?.trim();
   }
 
-  // Built on first use, so a missing key never breaks start-up.
+  // Built on first use, so a missing key never breaks start-up. META_MUSE_BASE_URL (with META_MUSE_RELAY_TOKEN, sent as
+  // x-relay-token) points the client at a relay when Meta does not serve the server's own region; both unset = Meta direct.
   private client() {
+    const relayToken = process.env.META_MUSE_RELAY_TOKEN?.trim();
     this._client ??= new OpenAI({
       apiKey: process.env.META_MUSE_API_KEY?.trim(),
-      baseURL: MUSE_CHAT_BASE_URL,
+      baseURL: process.env.META_MUSE_BASE_URL?.trim() || MUSE_CHAT_BASE_URL,
+      defaultHeaders: relayToken ? { 'x-relay-token': relayToken } : undefined,
     });
     return this._client;
   }

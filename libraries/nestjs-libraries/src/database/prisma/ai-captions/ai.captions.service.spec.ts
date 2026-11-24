@@ -647,14 +647,22 @@ describe('ai.video-captions: AiCaptionsService', () => {
       );
     });
 
-    it('refuses a channel that is not a live channel of the workspace, and an empty list', async () => {
+    it('refuses a channel that is not a live channel of the workspace', async () => {
       const h = build();
       const err = await failure(create(h, {}, ['int-yt', 'ghost']));
       expect(err.getStatus()).toBe(404);
       expect(codeOf(err)).toBe('CHANNEL_NOT_FOUND');
       expect(h.charging.reserve).not.toHaveBeenCalled();
+    });
 
-      expect(codeOf(await failure(create(h, {}, [])))).toBe('NO_CHANNELS');
+    it('starts the job with no channel: the transcription alone is charged and no publish is quoted', async () => {
+      const h = build();
+
+      const created = await create(h, {}, []);
+
+      expect(created).toMatchObject({ status: 'PENDING' });
+      expect(h.publish.preview).not.toHaveBeenCalled();
+      expect(h.charging.reserve).toHaveBeenCalled();
     });
 
     it('counts a channel named twice once', async () => {

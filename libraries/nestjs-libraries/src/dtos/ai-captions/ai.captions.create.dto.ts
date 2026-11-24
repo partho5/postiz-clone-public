@@ -1,18 +1,17 @@
 // AI captions (ai.video-captions): the body of POST /public/v1/ai-captions.
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
-  ValidateIf,
 } from 'class-validator';
 
-// Which channels the captions are written for: those auto-publish posts to (`auto`), or the ones the
-// phone names (`manual`).
+// Who started the job: the phone on its own because auto-publish is set up (`auto`; the captions are written for
+// the channels auto-publish posts to), or the creator by hand (`manual`; for the channels the phone names, if any).
+// Either way the transcript and subtitles are made, with or without a channel.
 export const AI_CAPTION_MODES = ['auto', 'manual'] as const;
 export type AiCaptionMode = (typeof AI_CAPTION_MODES)[number];
 
@@ -27,10 +26,10 @@ export class AiCaptionCreateDto {
   @IsIn(AI_CAPTION_MODES)
   mode: AiCaptionMode;
 
-  // `manual` only: the channels to write for (live channels of the workspace)
-  @ValidateIf((dto: AiCaptionCreateDto) => dto.mode === 'manual')
+  // `manual` only: the channels to write for (live channels of the workspace); none = the transcript and subtitles
+  // only
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(50)
   @IsString({ each: true })
   @IsNotEmpty({ each: true })

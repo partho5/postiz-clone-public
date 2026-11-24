@@ -287,7 +287,8 @@ export class AiCaptionsService {
   ) {}
 
   // Starts the caption job of an uploaded speech audio for these channels (the ones auto-publish posts to, or the
-  // ones the phone named; the caller works them out). A repeat for the same audio answers the caption it made and
+  // ones the phone named; the caller works them out; none is fine: the job then makes the transcript and subtitles
+  // only, and costs the transcription alone). A repeat for the same audio answers the caption it made and
   // holds nothing again. Answers SKIPPED, holding nothing, when the captions and the publish together cost more
   // than the available credits. Refuses with 503 when a key is missing, 404 AUDIO_NOT_FOUND, 409
   // AUDIO_NOT_COMPLETE, 404 CHANNEL_NOT_FOUND, and 400 AUDIO_NOT_SUPPORTED or AUDIO_TOO_LONG. The audio of a caption
@@ -347,9 +348,12 @@ export class AiCaptionsService {
 
     const [cost, publishCost, { available }] = await Promise.all([
       this.costOf(orgId, minutes),
-      this._publishChargingService
-        .preview(orgId, { integrationIds: channels.map((c) => c.id) })
-        .then((preview) => preview.amount),
+      // no channel, no post to keep credits for
+      channels.length
+        ? this._publishChargingService
+            .preview(orgId, { integrationIds: channels.map((c) => c.id) })
+            .then((preview) => preview.amount)
+        : 0,
       this._creditsService.balance(orgId),
     ]);
     // AI never takes credits a post needs
@@ -1025,15 +1029,12 @@ export class AiCaptionsService {
     }
   }
 
-  // The workspace's live channels among the ids, each once; 404 CHANNEL_NOT_FOUND for an id that is not one.
+  // The workspace's live channels among the ids, each once (none for no ids: the job then makes the transcript and
+  // subtitles only); 404 CHANNEL_NOT_FOUND for an id that is not one.
   private async liveChannels(orgId: string, ids: string[]) {
     const wanted = [...new Set(ids)];
     if (!wanted.length) {
-      throw new AiCaptionsException(
-        400,
-        'NO_CHANNELS',
-        'There is no channel to write captions for'
-      );
+      return [];
     }
     const live = await this._integrationService.getIntegrationsList(orgId);
     return wanted.map((id) => {

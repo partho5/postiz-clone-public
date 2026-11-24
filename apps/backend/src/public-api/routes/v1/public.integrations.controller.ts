@@ -24,10 +24,7 @@ import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.reque
 import { GetIncludeDeletedFromRequest } from '@gitroom/nestjs-libraries/user/include.deleted.from.request';
 import { Organization, User } from '@prisma/client';
 import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import {
-  AutoPublishNotConfiguredException,
-  AutoPublishService,
-} from '@gitroom/nestjs-libraries/database/prisma/auto-publish/auto.publish.service';
+import { AutoPublishService } from '@gitroom/nestjs-libraries/database/prisma/auto-publish/auto.publish.service';
 import { AutoPublishRequestDto } from '@gitroom/nestjs-libraries/dtos/auto-publish/auto.publish.request.dto';
 import { AutoPublishChannelDto } from '@gitroom/nestjs-libraries/dtos/auto-publish/auto.publish.channel.dto';
 import { AutoPublishPlatformsService } from '@gitroom/nestjs-libraries/database/prisma/auto-publish/auto.publish.platforms.service';
@@ -847,7 +844,8 @@ export class PublicIntegrationsController {
   }
 
   // The channels a caption job writes for: the ones the phone named (manual), or the ones auto-publish posts to
-  // (409 when it has none) and the text-only channels the workspace switched on.
+  // and the text-only channels the workspace switched on. None is fine: the job then makes the transcript and
+  // subtitles only.
   private async captionChannelIds(
     orgId: string,
     userId: string | undefined,
@@ -858,12 +856,11 @@ export class PublicIntegrationsController {
     }
     const { channels } = await this._autoPublishService.info(orgId, userId);
     const usable = channels.filter((channel) => !channel.disabled);
-    if (!usable.length) {
-      throw new AutoPublishNotConfiguredException();
-    }
     return [
       ...usable.map((channel) => channel.id),
-      ...(await this._autoPublishService.textChannelIds(orgId)),
+      ...(usable.length
+        ? await this._autoPublishService.textChannelIds(orgId)
+        : []),
     ];
   }
 
