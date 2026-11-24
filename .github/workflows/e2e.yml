@@ -53,6 +53,8 @@ jobs:
       EMAIL_PROVIDER: log
       EMAIL_FROM_NAME: E2E
       EMAIL_FROM_ADDRESS: e2e@e2e.test
+      OTP_RESEND_COOLDOWN_SECONDS: '0'
+      OTP_REQUEST_LIMIT: '1000'
       E2E_BACKEND_LOG: ${{ github.workspace }}/tmp/e2e/logs/backend.log
 
     steps:
