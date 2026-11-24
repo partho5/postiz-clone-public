@@ -70,7 +70,9 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          # The key's entry in the VPS ~/.ssh/authorized_keys is a forced command (restrict), so whatever is asked here, the
+          # VPS runs only: flock /tmp/smm-deploy.lock sh /var/www/smm/deploy/scripts/deploy.sh 2gb
+          # (pull the image, migrate, recreate what changed, wait for the app). The word below is only a label.
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
-              -o ServerAliveInterval=30 linton@"$DEPLOY_HOST" \
-              'cd /path/to/app && ./manual-up.sh'
+              -o ServerAliveInterval=30 linton@"$DEPLOY_HOST" deploy
           
