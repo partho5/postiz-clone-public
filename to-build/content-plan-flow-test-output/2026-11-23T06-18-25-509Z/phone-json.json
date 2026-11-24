@@ -1,0 +1,101 @@
+{
+  "status": "ACTIVE",
+  "today": "2026-11-23",
+  "timezone": "UTC",
+  "week": {
+    "id": "test-week-1",
+    "weekStart": "2026-11-23",
+    "weekEnd": "2026-11-29",
+    "idea": "Explain step by step what a routine checkup involves and how gentle handling and clear explanations help nervous adults feel calmer about booking.",
+    "status": "READY",
+    "days": [
+      {
+        "id": "test-day-1",
+        "date": "2026-11-23",
+        "dayIndex": 0,
+        "title": "Afraid Your Checkup Will Hurt? What Helps It Feel Calmer",
+        "angle": "problem",
+        "why": "Helps nervous working adults understand a checkup so booking feels less scary.",
+        "beats": [
+          {
+            "hook": "Worried it will hurt",
+            "say": "If you keep putting off your checkup because you are afraid it will hurt, you are not alone. Many working adults feel the same way. And that worry makes perfect sense."
+          },
+          {
+            "hook": "What a checkup looks like",
+            "say": "A routine checkup is usually straightforward. We take a careful look at your teeth and gums and listen to any concerns you have. Then we talk you through what we see in plain words."
+          },
+          {
+            "hook": "Gentle, clear steps",
+            "say": "We keep our handling gentle and explain each step before we do it. So there are no surprises while you are in the chair. You can ask us to pause and explain again any time."
+          },
+          {
+            "hook": "Calmer booking",
+            "say": "If booking feels hard, start by telling us you feel nervous when you get in touch. We will keep the pace calm and check in with you. Small steps can make coming back feel much easier."
+          }
+        ],
+        "closingLine": "If you have questions about checkups, send us a message and we will talk you through it.",
+        "status": "PLANNED",
+        "version": 1
+      },
+      {
+        "id": "test-day-2",
+        "date": "2026-11-25",
+        "dayIndex": 2,
+        "title": "Waiting Till It Hurts? A Calmer Way to Book a Checkup",
+        "angle": "mistake",
+        "why": "Speaks to busy adults who delay visits until pain and shows a calmer earlier option.",
+        "beats": [
+          {
+            "hook": "Waiting for pain",
+            "say": "If you are waiting until a tooth really hurts before you book a checkup, I understand why. Life gets busy and feeling afraid of pain is very real. But waiting often makes visits feel harder to face."
+          },
+          {
+            "hook": "Why waiting backfires",
+            "say": "A small concern can sit quietly and you might not notice it. By the time it starts aching, it may need more involved care. Seeing things earlier keeps explanations and choices simpler."
+          },
+          {
+            "hook": "A calmer way to book",
+            "say": "Instead of waiting for pain, book a checkup while things feel okay. We will go gently and explain what we see in plain words. That way you can think things through calmly."
+          },
+          {
+            "hook": "What to do next",
+            "say": "It helps to bring a few questions about your teeth or gums. Ask what affects cost or what the next options could look like. Clear, honest answers can make deciding feel much calmer."
+          }
+        ],
+        "closingLine": "When you are ready to stop waiting, reach out and ask about booking a checkup.",
+        "status": "PLANNED",
+        "version": 1
+      },
+      {
+        "id": "test-day-3",
+        "date": "2026-11-27",
+        "dayIndex": 4,
+        "title": "Imagine Someone Nervous About Their First Checkup Back",
+        "angle": "story",
+        "why": "Reassures adults returning after time away by showing a kind, explained first visit back.",
+        "beats": [
+          {
+            "hook": "Nervous to return",
+            "say": "If you have not seen a dentist for a long time because you dread pain, this one is for you as a busy adult. Imagine someone who works full time and keeps cancelling. That fear of the unknown feels heavy."
+          },
+          {
+            "hook": "Imagining first visit",
+            "say": "Imagine they finally book a routine checkup and feel tense in the waiting room. They worry about being judged or caught off guard. They just want someone to explain things kindly."
+          },
+          {
+            "hook": "Gentle welcome explained",
+            "say": "In our room, we start with a chat and a gentle look at teeth and gums. We explain what we notice in plain words and pause for questions. Nothing rushed, everything talked through calmly together."
+          },
+          {
+            "hook": "Leaving calmer",
+            "say": "Imagine they leave understanding what is happening and what affects cost. They still have choices to think about at home. But coming back next time feels a little lighter and less unknown."
+          }
+        ],
+        "closingLine": "If this sounds like you, get in touch whenever you feel ready to chat.",
+        "status": "PLANNED",
+        "version": 1
+      }
+    ]
+  }
+}

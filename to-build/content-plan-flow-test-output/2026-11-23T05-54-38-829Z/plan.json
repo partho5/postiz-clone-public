@@ -1,0 +1,278 @@
+{
+  "direction": "Brightside Dental is a family dental clinic in a mid-sized city.\n\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\n\nAudience: mostly working adults aged 25 to 45 and parents of young children.\n\nCustomers' core problems: many put off visits because they are afraid it will hurt and they believe treatment is very expensive. Some think a root canal means losing the tooth.\n\nHow the business helps: comfort steps for patients who are afraid, and clear pricing for patients worried about cost.\n\nCommon questions patients ask about most: pain, cost, and whether treatment is needed.\n\nObjections and misunderstandings: fear it will hurt, belief treatment is very expensive, belief that root canal means losing the tooth.\n\nTone: calm, friendly, honest.\n\nVideo plan: usual length 60 seconds. Mostly teach and reassure, mention services lightly.\n\nViewer next step: book a checkup.\n\nOn camera: a dentist from the clinic.\n\nOwner insists on: avoid close-up treatment scenes.",
+  "facts": {
+    "audience": "mostly working adults aged 25 to 45 and parents of young children",
+    "objections": [
+      "fear it will hurt",
+      "belief treatment is very expensive",
+      "belief that root canal means losing the tooth"
+    ],
+    "problems": [
+      "many put off visits because they are afraid it will hurt",
+      "they believe treatment is very expensive",
+      "some think a root canal means losing the tooth"
+    ],
+    "solution": "comfort steps for patients who are afraid, and clear pricing for patients worried about cost",
+    "tone": "calm, friendly, honest",
+    "videoSeconds": 60,
+    "whatWeDo": "Brightside Dental is a family dental clinic in a mid-sized city offering checkups, cleaning, fillings, root canal treatment, braces and children's dentistry"
+  },
+  "themes": [
+    {
+      "description": "For patients who put off visits because they are afraid it will hurt.",
+      "name": "Feeling calmer about visiting",
+      "ref": "calm-visits"
+    },
+    {
+      "description": "For patients who believe treatment is very expensive and want clear pricing.",
+      "name": "Understanding cost",
+      "ref": "clear-cost"
+    },
+    {
+      "description": "Answers to common questions about pain, cost, and whether treatment is needed.",
+      "name": "Whether treatment is needed",
+      "ref": "treatment-need"
+    },
+    {
+      "description": "Help for parents of young children about checkups, children's dentistry and braces.",
+      "name": "Parents and children's visits",
+      "ref": "family-kids"
+    }
+  ],
+  "clusters": [
+    {
+      "problem": "I keep putting off my checkup because I am afraid it will hurt",
+      "ref": "calm-1",
+      "themeRef": "calm-visits",
+      "title": "Putting off a checkup because I am afraid it will hurt"
+    },
+    {
+      "problem": "I am worried that cleaning will hurt so I avoid booking it",
+      "ref": "calm-2",
+      "themeRef": "calm-visits",
+      "title": "Worried that cleaning will hurt"
+    },
+    {
+      "problem": "I am scared that getting a filling or root canal treatment will hurt",
+      "ref": "calm-3",
+      "themeRef": "calm-visits",
+      "title": "Scared a filling or root canal treatment will hurt"
+    },
+    {
+      "problem": "I am afraid to visit - what comfort steps do you have for patients who are afraid?",
+      "ref": "calm-4",
+      "themeRef": "calm-visits",
+      "title": "What comfort steps do you have if I am afraid?"
+    },
+    {
+      "problem": "I think a checkup and cleaning will be very expensive so I put it off",
+      "ref": "cost-1",
+      "themeRef": "clear-cost",
+      "title": "I think a checkup and cleaning is very expensive"
+    },
+    {
+      "problem": "I am worried that a filling will be very expensive",
+      "ref": "cost-2",
+      "themeRef": "clear-cost",
+      "title": "Worried a filling will be very expensive"
+    },
+    {
+      "problem": "I am worried that root canal treatment will be very expensive",
+      "ref": "cost-3",
+      "themeRef": "clear-cost",
+      "title": "Worried root canal treatment will be very expensive"
+    },
+    {
+      "problem": "I worry about cost - how will I know the clear pricing before I agree to treatment?",
+      "ref": "cost-4",
+      "themeRef": "clear-cost",
+      "title": "How will I know the price before I agree?"
+    },
+    {
+      "problem": "I heard a root canal means losing the tooth - is that true?",
+      "ref": "need-1",
+      "themeRef": "treatment-need",
+      "title": "Does a root canal mean losing the tooth?"
+    },
+    {
+      "problem": "How do I know whether I really need a filling or not?",
+      "ref": "need-2",
+      "themeRef": "treatment-need",
+      "title": "How do I know if I really need a filling?"
+    },
+    {
+      "problem": "How do I know whether I really need root canal treatment?",
+      "ref": "need-3",
+      "themeRef": "treatment-need",
+      "title": "How do I know if I really need root canal treatment?"
+    },
+    {
+      "problem": "Nothing hurts right now - how do I know whether I need treatment or a checkup?",
+      "ref": "need-4",
+      "themeRef": "treatment-need",
+      "title": "Nothing hurts - do I still need treatment or a checkup?"
+    },
+    {
+      "problem": "I am a parent and my child is afraid a dental visit will hurt",
+      "ref": "fam-1",
+      "themeRef": "family-kids",
+      "title": "My child is afraid it will hurt"
+    },
+    {
+      "problem": "I am a parent and I worry children's dentistry and checkups will be very expensive",
+      "ref": "fam-2",
+      "themeRef": "family-kids",
+      "title": "Worried children's dentistry will be very expensive"
+    },
+    {
+      "problem": "I am a parent - how do I know whether my child needs braces?",
+      "ref": "fam-3",
+      "themeRef": "family-kids",
+      "title": "How do I know if my child needs braces?"
+    },
+    {
+      "problem": "My child says nothing hurts - how do I know whether they still need a checkup or cleaning?",
+      "ref": "fam-4",
+      "themeRef": "family-kids",
+      "title": "My child says nothing hurts - do they need a checkup?"
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "weekStart": "2026-11-23",
+      "cluster": "Putting off a checkup because I am afraid it will hurt",
+      "idea": "A dentist walks through what a routine checkup usually includes and the comfort steps the clinic uses for nervous adults who put off visits.",
+      "outline": [
+        {
+          "title": "Afraid a Checkup Will Hurt? How We Keep Nervous Visits Calm",
+          "angle": "problem"
+        },
+        {
+          "title": "Waiting Until It Hurts to Book a Checkup? What to Do Instead",
+          "angle": "mistake"
+        },
+        {
+          "title": "Imagine Someone Who Keeps Putting Off a Checkup From Fear",
+          "angle": "story"
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "weekStart": "2026-11-30",
+      "cluster": "I think a checkup and cleaning is very expensive",
+      "idea": "A dentist explains how clear pricing for a checkup and cleaning is shared before treatment and how patients can ask about cost before booking.",
+      "outline": [
+        {
+          "title": "The mistake of putting off a checkup without asking about",
+          "angle": "mistake"
+        },
+        {
+          "title": "Imagine someone who keeps delaying a cleaning because of",
+          "angle": "story"
+        },
+        {
+          "title": "Will I know the checkup and cleaning cost before treatment?",
+          "angle": "question"
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "weekStart": "2026-12-07",
+      "cluster": "Does a root canal mean losing the tooth?",
+      "idea": "A dentist addresses the misunderstanding that root canal treatment means losing the tooth and explains why a checkup helps discuss what is needed.",
+      "outline": [
+        {
+          "title": "Imagine someone who puts off a checkup thinking root canal",
+          "angle": "story"
+        },
+        {
+          "title": "Does a root canal mean losing the tooth?",
+          "angle": "question"
+        },
+        {
+          "title": "Assuming tooth loss versus asking at a checkup what is",
+          "angle": "comparison"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "weekStart": "2026-12-14",
+      "cluster": "My child is afraid it will hurt",
+      "idea": "A dentist shares comfort steps used with young children during a visit and how parents can talk about the visit at home.",
+      "outline": [
+        {
+          "title": "Will my child's dental visit hurt?",
+          "angle": "question"
+        },
+        {
+          "title": "Calm talk at home vs scary talk before a visit",
+          "angle": "comparison"
+        },
+        {
+          "title": "Steps parents can try before a child's dental visit",
+          "angle": "steps"
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "weekStart": "2026-12-21",
+      "cluster": "Worried that cleaning will hurt",
+      "idea": "A dentist explains what a routine cleaning usually involves and the comfort steps available for adults who feel nervous about booking it.",
+      "outline": null
+    },
+    {
+      "week": 6,
+      "weekStart": "2026-12-28",
+      "cluster": "Worried a filling will be very expensive",
+      "idea": "A dentist explains how clear pricing for a filling is discussed before treatment and what questions to ask if cost worries you.",
+      "outline": null
+    },
+    {
+      "week": 7,
+      "weekStart": "2027-01-04",
+      "cluster": "How do I know if I really need a filling?",
+      "idea": "A dentist explains how a checkup helps decide whether a filling is needed and how findings are explained in plain language.",
+      "outline": null
+    },
+    {
+      "week": 8,
+      "weekStart": "2027-01-11",
+      "cluster": "Worried children's dentistry will be very expensive",
+      "idea": "A dentist explains how clear pricing for children's checkups is shared with parents before treatment so they can ask questions.",
+      "outline": null
+    },
+    {
+      "week": 9,
+      "weekStart": "2027-01-18",
+      "cluster": "Scared a filling or root canal treatment will hurt",
+      "idea": "A dentist walks through the comfort steps explained before a filling or root canal treatment for adults who feel scared to book.",
+      "outline": null
+    },
+    {
+      "week": 10,
+      "weekStart": "2027-01-25",
+      "cluster": "Worried root canal treatment will be very expensive",
+      "idea": "A dentist explains how clear pricing for root canal treatment is discussed in advance and why a checkup comes first to confirm what is needed.",
+      "outline": null
+    },
+    {
+      "week": 11,
+      "weekStart": "2027-02-01",
+      "cluster": "How do I know if I really need root canal treatment?",
+      "idea": "A dentist explains what is discussed during a checkup when tooth pain is reported and how the need for root canal treatment is explained.",
+      "outline": null
+    },
+    {
+      "week": 12,
+      "weekStart": "2027-02-08",
+      "cluster": "How do I know if my child needs braces?",
+      "idea": "A dentist explains how a checkup helps parents discuss whether braces might be needed for a child and what questions to ask.",
+      "outline": null
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Fails when a retired planning reference comes back: the _planning folder, or goal, decision and
+# drift IDs (G-0xx, D-0xx, DR-0xx) in code and docs. Frozen Temporal workflow files and to-build/
+# are excluded on purpose.
+name: Stale references
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  stale-references:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on retired planning references
+        run: |
+          if git grep -n -E '_planning|\b(G|D|DR)-[0-9]{2,3}\b' -- . \
+            ':!apps/orchestrator/src/workflows' ':!to-build' ':!.github/workflows/stale-references.yml'; then
+            echo "Retired planning references found above; remove them."
+            exit 1
+          fi
+          echo "No retired planning references."

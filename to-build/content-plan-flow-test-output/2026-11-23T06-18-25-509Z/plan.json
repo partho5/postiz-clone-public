@@ -1,0 +1,276 @@
+{
+  "direction": "Brightside Dental is a family dental clinic in a mid-sized city.\n\nWhat we do:\n- Checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\n\nWho we help:\n- Mostly working adults aged 25 to 45 and parents of young children.\n\nCustomers' core problems:\n- Many put off visits because they are afraid it will hurt.\n- Many believe treatment is very expensive.\n\nCommon question:\n- The question patients ask most: Will it hurt?\n\nObjection / misunderstanding:\n- Some think a root canal means losing the tooth.\n\nHow we solve it:\n- Gentle approach and clear explanations to make visits feel calmer.\n- When people worry about cost, explain what affects cost, no numbers.\n\nTone insisted on:\n- Calm, friendly, honest videos.\n\nVideo setup:\n- Usual video length: 60 seconds (about a minute).\n- Mix: mostly teach and reassure, mention services lightly.\n- Who appears: dentist talking to camera.",
+  "facts": {
+    "audience": "Mostly working adults aged 25 to 45 and parents of young children.",
+    "objections": [
+      "Will it hurt?",
+      "Some think a root canal means losing the tooth."
+    ],
+    "problems": [
+      "Many put off visits because they are afraid it will hurt.",
+      "Many believe treatment is very expensive."
+    ],
+    "solution": "Gentle approach and clear explanations to make visits feel calmer. When people worry about cost, explain what affects cost.",
+    "tone": "Calm, friendly, honest videos.",
+    "videoSeconds": 60,
+    "whatWeDo": "Checkups, cleaning, fillings, root canal treatment, braces and children's dentistry."
+  },
+  "themes": [
+    {
+      "description": "Helping nervous adults feel calmer about coming in through gentle approach and clear explanations.",
+      "name": "Calmer Visits",
+      "ref": "calmer-visits"
+    },
+    {
+      "description": "Explaining what affects treatment cost for people who worry it is very expensive.",
+      "name": "Costs Explained",
+      "ref": "cost-explained"
+    },
+    {
+      "description": "Clear explanations of checkups, fillings, root canal treatment and braces in simple terms.",
+      "name": "Treatments Explained Simply",
+      "ref": "treatments-simply"
+    },
+    {
+      "description": "Reassuring parents about children's dentistry and first visits.",
+      "name": "Kids Visits",
+      "ref": "kids-visits"
+    }
+  ],
+  "clusters": [
+    {
+      "problem": "I keep putting off my checkup because I'm afraid it will hurt.",
+      "ref": "calm-1",
+      "themeRef": "calmer-visits",
+      "title": "Will my checkup hurt?"
+    },
+    {
+      "problem": "I feel nervous in the chair and want to know how visits are made to feel calmer.",
+      "ref": "calm-2",
+      "themeRef": "calmer-visits",
+      "title": "How do you help nervous patients feel calmer?"
+    },
+    {
+      "problem": "I think I might need a filling but I'm afraid it will hurt.",
+      "ref": "calm-3",
+      "themeRef": "calmer-visits",
+      "title": "Will getting a filling hurt?"
+    },
+    {
+      "problem": "I feel embarrassed and scared to come back after putting off visits for a long time.",
+      "ref": "calm-4",
+      "themeRef": "calmer-visits",
+      "title": "What if I have not been for years because I am scared?"
+    },
+    {
+      "problem": "I put off booking because I believe treatment is very expensive.",
+      "ref": "cost-1",
+      "themeRef": "cost-explained",
+      "title": "I think dental treatment is very expensive"
+    },
+    {
+      "problem": "I do not understand what affects the cost of my treatment.",
+      "ref": "cost-2",
+      "themeRef": "cost-explained",
+      "title": "What affects the cost of treatment?"
+    },
+    {
+      "problem": "I want a checkup and cleaning but I worry about what it means for cost.",
+      "ref": "cost-3",
+      "themeRef": "cost-explained",
+      "title": "Will a checkup and cleaning cost a lot?"
+    },
+    {
+      "problem": "I worry about surprises and want a clear explanation before treatment starts.",
+      "ref": "cost-4",
+      "themeRef": "cost-explained",
+      "title": "Can I know what to expect before you start?"
+    },
+    {
+      "problem": "I heard a root canal means losing the tooth and I am worried about it.",
+      "ref": "treat-1",
+      "themeRef": "treatments-simply",
+      "title": "Does a root canal mean losing my tooth?"
+    },
+    {
+      "problem": "I do not know what happens at a checkup and cleaning and I feel unsure.",
+      "ref": "treat-2",
+      "themeRef": "treatments-simply",
+      "title": "What happens during a checkup and cleaning?"
+    },
+    {
+      "problem": "I have a problem with my tooth and wonder if I need a filling and what it involves.",
+      "ref": "treat-3",
+      "themeRef": "treatments-simply",
+      "title": "When do I need a filling?"
+    },
+    {
+      "problem": "I am a working adult wondering if braces could be for me.",
+      "ref": "treat-4",
+      "themeRef": "treatments-simply",
+      "title": "Could braces be for me as an adult?"
+    },
+    {
+      "problem": "I am a parent and I do not know how to prepare my young child for the first visit.",
+      "ref": "kids-1",
+      "themeRef": "kids-visits",
+      "title": "How do I prepare my child for the first visit?"
+    },
+    {
+      "problem": "My child is scared it will hurt and I want the visit to feel calmer.",
+      "ref": "kids-2",
+      "themeRef": "kids-visits",
+      "title": "My child is afraid it will hurt"
+    },
+    {
+      "problem": "I am a parent and I wonder about checkups and cleaning for my young child.",
+      "ref": "kids-3",
+      "themeRef": "kids-visits",
+      "title": "What about checkups for my young child?"
+    },
+    {
+      "problem": "I am a parent wondering about braces for my child.",
+      "ref": "kids-4",
+      "themeRef": "kids-visits",
+      "title": "Could my child need braces?"
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "weekStart": "2026-11-23",
+      "cluster": "Will my checkup hurt?",
+      "idea": "Explain step by step what a routine checkup involves and how gentle handling and clear explanations help nervous adults feel calmer about booking.",
+      "outline": [
+        {
+          "title": "Afraid Your Checkup Will Hurt? What Helps It Feel Calmer",
+          "angle": "problem"
+        },
+        {
+          "title": "Waiting Till It Hurts? A Calmer Way to Book a Checkup",
+          "angle": "mistake"
+        },
+        {
+          "title": "Imagine Someone Nervous About Their First Checkup Back",
+          "angle": "story"
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "weekStart": "2026-11-30",
+      "cluster": "I think dental treatment is very expensive",
+      "idea": "Talk through the common worry that treatment is always very expensive and how asking for a clear explanation of options can make planning the next step feel calmer.",
+      "outline": [
+        {
+          "title": "Don't Put Off Booking Over Cost Worries Alone",
+          "angle": "mistake"
+        },
+        {
+          "title": "Imagine Someone Who Fears the Cost of Treatment",
+          "angle": "story"
+        },
+        {
+          "title": "Ask What Affects Your Treatment Cost",
+          "angle": "question"
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "weekStart": "2026-12-07",
+      "cluster": "Does a root canal mean losing my tooth?",
+      "idea": "Clarify the misunderstanding that a root canal means losing the tooth by explaining in simple calm terms what root canal treatment involves.",
+      "outline": [
+        {
+          "title": "Imagine someone afraid a root canal loses the tooth",
+          "angle": "story"
+        },
+        {
+          "title": "Does a root canal mean losing my tooth?",
+          "angle": "question"
+        },
+        {
+          "title": "Keeping your tooth or losing it, compared calmly",
+          "angle": "comparison"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "weekStart": "2026-12-14",
+      "cluster": "How do I prepare my child for the first visit?",
+      "idea": "Share simple ways parents can describe the first dental visit in calm positive words so young children know what to expect.",
+      "outline": [
+        {
+          "title": "How Do I Prepare My Child for the First Visit?",
+          "angle": "question"
+        },
+        {
+          "title": "Calm Words vs Worried Words Before a Visit",
+          "angle": "comparison"
+        },
+        {
+          "title": "Simple Steps for a Calmer First Dental Visit",
+          "angle": "steps"
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "weekStart": "2026-12-21",
+      "cluster": "How do you help nervous patients feel calmer?",
+      "idea": "Explain how a gentle approach with pauses for questions and clear explanations throughout the visit helps nervous patients feel calmer.",
+      "outline": null
+    },
+    {
+      "week": 6,
+      "weekStart": "2026-12-28",
+      "cluster": "What affects the cost of treatment?",
+      "idea": "Outline in general terms how the dentist explains what affects treatment cost during a calm conversation so patients understand their choices.",
+      "outline": null
+    },
+    {
+      "week": 7,
+      "weekStart": "2027-01-04",
+      "cluster": "What happens during a checkup and cleaning?",
+      "idea": "Walk through what happens during a checkup and cleaning in plain language so unsure patients know what to expect from arrival to finish.",
+      "outline": null
+    },
+    {
+      "week": 8,
+      "weekStart": "2027-01-11",
+      "cluster": "My child is afraid it will hurt",
+      "idea": "Explain how a gentle approach and simple clear words help young children who are scared it will hurt feel calmer in the chair.",
+      "outline": null
+    },
+    {
+      "week": 9,
+      "weekStart": "2027-01-18",
+      "cluster": "Will getting a filling hurt?",
+      "idea": "Explain in calm simple terms what having a filling involves and how gentle care and clear explanations help nervous patients feel calmer.",
+      "outline": null
+    },
+    {
+      "week": 10,
+      "weekStart": "2027-01-25",
+      "cluster": "Will a checkup and cleaning cost a lot?",
+      "idea": "Address the worry about checkup and cleaning cost by explaining how the dentist talks through what is involved and what affects cost in plain terms.",
+      "outline": null
+    },
+    {
+      "week": 11,
+      "weekStart": "2027-02-01",
+      "cluster": "When do I need a filling?",
+      "idea": "Explain how the dentist checks a tooth concern during a checkup and clearly talks through when a filling is discussed as an option.",
+      "outline": null
+    },
+    {
+      "week": 12,
+      "weekStart": "2027-02-08",
+      "cluster": "What about checkups for my young child?",
+      "idea": "Explain what a gentle checkup and cleaning visit looks like for young children and how clear simple explanations help parents and children feel calmer.",
+      "outline": null
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Files that run on Linux (inside the Docker image or on the VPS) must keep LF endings,
+# whatever core.autocrlf says on the machine that checks them out or builds the image.
+*.sh text eol=lf
+Dockerfile* text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+Caddyfile text eol=lf
+*.conf text eol=lf
+*.env text eol=lf
+env.example text eol=lf

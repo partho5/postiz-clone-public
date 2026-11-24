@@ -1,0 +1,142 @@
+#!/bin/sh
+# Schema migrations: applies pending Prisma migrations to DATABASE_URL.
+# Everything is checked before anything is applied: the migrations must produce
+# schema.prisma, and the database must equal what its already applied
+# migrations produce, replayed in a scratch schema of the same database (no
+# CREATEDB needed). A database created earlier by `db push` has the baseline
+# schema but no migration history; it is recorded as being at the baseline
+# first, and its data is never touched. A refused database is left as it was.
+# Migration SQL must not name a schema (e.g. "public") so that it replays.
+# Run through `pnpm run prisma-migrate-deploy`.
+set -eu
+export LC_ALL=C
+
+: "${DATABASE_URL:?DATABASE_URL is required}"
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+SCHEMA="$DIR/../schema.prisma"
+BASELINE="0_baseline"
+PRISMA="pnpm dlx prisma@6.5.0"
+REPLAY="_migrate_deploy_replay"
+WORK="$(mktemp -d)"
+
+# DATABASE_URL pointed at the scratch schema; any schema it names is replaced.
+REPLAY_URL="$(printf '%s' "$DATABASE_URL" | sed -E 's/([?&])schema=[^&]*&?/\1/; s/[?&]$//')"
+case "$REPLAY_URL" in
+  *\?*) REPLAY_URL="$REPLAY_URL&schema=$REPLAY" ;;
+  *) REPLAY_URL="$REPLAY_URL?schema=$REPLAY" ;;
+esac
+
+# Removes the scratch schema and the working folder, keeping the script's exit code.
+clean_up() {
+  CODE=$?
+  rm -rf "$WORK"
+  if [ -n "${REPLAYED:-}" ]; then
+    printf 'DROP SCHEMA IF EXISTS "%s" CASCADE;\n' "$REPLAY" |
+      $PRISMA db execute --url "$DATABASE_URL" --stdin >/dev/null ||
+      echo "migrate-deploy: could not drop the scratch schema $REPLAY; the next run replaces it." >&2
+  fi
+  exit "$CODE"
+}
+trap clean_up EXIT
+trap 'exit 130' INT TERM
+
+# Runs `prisma migrate diff` with the given sides; sets DIFF to 0 (same) or 2 (different), exits on error.
+compare() {
+  DIFF=0
+  $PRISMA migrate diff "$@" --exit-code >/dev/null || DIFF=$?
+  if [ "$DIFF" -ne 0 ] && [ "$DIFF" -ne 2 ]; then
+    echo "migrate-deploy: could not compare the database (see Prisma's error above);" \
+      "nothing was changed." >&2
+    exit "$DIFF"
+  fi
+}
+
+# Diffs a migrations folder, replayed in the scratch schema, against the given side.
+compare_replay() {
+  REPLAYED=1
+  compare --from-migrations "$1" --shadow-database-url "$REPLAY_URL" "$2" "$3"
+}
+
+# Prints the name of every migration folder, in the order Prisma applies them.
+migration_names() {
+  for file in "$DIR"/*/migration.sql; do
+    basename "$(dirname "$file")"
+  done
+}
+
+# Fails when schema.prisma has changes that no migration makes.
+refuse_unmigrated_schema() {
+  compare_replay "$DIR" --to-schema-datamodel "$SCHEMA"
+  if [ "$DIFF" -eq 2 ]; then
+    echo "migrate-deploy: schema.prisma has changes that no migration makes; nothing was changed." \
+      "Add a migration with prisma-migrate-dev, then run again." >&2
+    exit 1
+  fi
+}
+
+# Sets APPLIED to the number of leading migrations the database reports as applied.
+count_applied() {
+  PENDING=$($PRISMA migrate status --schema "$SCHEMA" 2>&1 |
+    awk '/have not yet been applied:/ { list = 1; next } list && /^$/ { list = 0 } list { n++ } END { print n + 0 }')
+  APPLIED=$(( $(migration_names | wc -l) - PENDING ))
+}
+
+# Copies schema.prisma and the first APPLIED migrations into WORK.
+prepare_applied() {
+  mkdir -p "$WORK/migrations"
+  cp "$SCHEMA" "$WORK/schema.prisma"
+  cp "$DIR/migration_lock.toml" "$WORK/migrations/"
+  for name in $(migration_names | head -n "$APPLIED"); do
+    cp -R "$DIR/$name" "$WORK/migrations/"
+  done
+}
+
+# Fails unless the database has applied every migration copied into WORK, none of them failed.
+refuse_mismatched_history() {
+  STATUS=0
+  OUTPUT=$($PRISMA migrate status --schema "$WORK/schema.prisma" 2>&1) || STATUS=$?
+  if [ "$STATUS" -ne 0 ]; then
+    printf '%s\n' "$OUTPUT"
+    echo "migrate-deploy: the database's migration history does not match these migrations;" \
+      "nothing was changed." >&2
+    exit 1
+  fi
+}
+
+# Fails when the database differs from what its applied migrations produce.
+refuse_drift() {
+  compare_replay "$WORK/migrations" --to-url "$DATABASE_URL"
+  if [ "$DIFF" -eq 2 ]; then
+    echo "migrate-deploy: the database differs from what its applied migrations produce, so it was" \
+      "changed outside a migration; nothing was changed. Undo that change, then run again." >&2
+    exit 1
+  fi
+}
+
+# Records the baseline as applied when a history-less database matches it exactly; an empty
+# database is left to `migrate deploy`; fails otherwise.
+baseline_existing() {
+  compare --from-empty --to-url "$DATABASE_URL"
+  if [ "$DIFF" -eq 0 ]; then
+    return
+  fi
+  compare --from-url "$DATABASE_URL" --to-schema-datamodel "$DIR/$BASELINE/baseline.prisma"
+  if [ "$DIFF" -eq 2 ]; then
+    echo "migrate-deploy: the database has no migration history and differs from $BASELINE;" \
+      "nothing was changed. Bring it to the $BASELINE schema, then run again." >&2
+    exit 1
+  fi
+  $PRISMA migrate resolve --applied "$BASELINE" --schema "$SCHEMA"
+}
+
+refuse_unmigrated_schema
+count_applied
+if [ "$APPLIED" -gt 0 ]; then
+  prepare_applied
+  refuse_mismatched_history
+  refuse_drift
+else
+  baseline_existing
+fi
+$PRISMA migrate deploy --schema "$SCHEMA"

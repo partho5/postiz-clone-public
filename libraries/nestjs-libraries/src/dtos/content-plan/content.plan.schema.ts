@@ -1,0 +1,319 @@
+// Content plan: the shared types, limits and constants of the AI content plan, and the validated shapes of every
+// request body. Both the backend and the frontend import from here.
+import { z } from 'zod';
+
+export const ANGLES = [
+  'problem',
+  'mistake',
+  'story',
+  'question',
+  'comparison',
+  'steps',
+  'fear_loss',
+  'behind_the_scenes',
+  'customer_voice',
+  'trend',
+] as const;
+export type Angle = (typeof ANGLES)[number];
+export const ROADMAP_WEEKS = 12;
+export const CARRY_MAX = 3;
+// Weeks with a full outline in the preview.
+export const PREVIEW_WEEKS = 4;
+export const LIMITS = {
+  sourceText: 8000,
+  direction: 6000,
+  brief: 2000,
+  idea: 300,
+  urgentNote: 1000,
+  feedback: 2000,
+  title: 60,
+  why: 240,
+  hook: 100,
+  other: 300,
+  // `say` and `closingLine` are never shown while recording (Practice only), so they get no visible-text limit, only a
+  // high safety cap against runaway output.
+  say: 2000,
+  closingLine: 600,
+};
+// The phone's text-slide limit.
+export const SLIDE_TEXT_MAX = 200;
+// Up to this length the phone shows a slide at full size (26sp).
+export const SLIDE_TEXT_FULL_SIZE = 100;
+export const VIDEO_SECONDS = [30, 60, 90, 120] as const;
+export const DEFAULT_VIDEO_SECONDS = 60;
+export const VIDEOS_PER_WEEK = [1, 2, 3, 4, 5, 6, 7] as const;
+export const DEFAULT_VIDEOS_PER_WEEK = 3;
+// Which days of the 7-day week (offsets from the week's start) carry a video: spread evenly, floor(i * 7 / count).
+export const SLOT_DAYS: Record<number, number[]> = {
+  1: [0],
+  2: [0, 3],
+  3: [0, 2, 4],
+  4: [0, 1, 3, 5],
+  5: [0, 1, 2, 4, 5],
+  6: [0, 1, 2, 3, 4, 5],
+  7: [0, 1, 2, 3, 4, 5, 6],
+};
+// Beats per video, decided by code from the video length: <=45 s -> 3, <=75 s -> 4, <=105 s -> 5, else 6.
+export const beatsFor = (seconds: number) =>
+  seconds <= 45 ? 3 : seconds <= 75 ? 4 : seconds <= 105 ? 5 : 6;
+// Estimate of spoken words per second, used only to give the model a spoken-length target (`targetWords`); code never
+// counts words and never checks against it.
+export const WORDS_PER_SECOND = 2.3;
+export const targetWordsFor = (seconds: number) =>
+  Math.round(seconds * WORDS_PER_SECOND);
+
+export type PlanStatus = 'NONE' | 'SETUP' | 'PROPOSED' | 'ACTIVE';
+export interface PlanFacts {
+  whatWeDo: string;
+  audience: string;
+  problems: string[];
+  solution: string;
+  objections: string[];
+  tone: string;
+  videoSeconds: (typeof VIDEO_SECONDS)[number];
+}
+export interface PlanBeat {
+  hook: string;
+  say: string;
+}
+export interface PlanQuestion {
+  id: string;
+  text: string;
+  options: { id: string; label: string }[];
+  recommendedOptionId: string;
+}
+export interface PlanAnswer {
+  questionId: string;
+  optionId: string | null;
+  other: string | null;
+}
+export interface PlanOutlineItem {
+  title: string;
+  angle: Angle;
+}
+export interface PlanCarryItem {
+  title: string;
+  angle: Angle;
+  clusterId: string;
+}
+export interface PlanProposal {
+  version: number;
+  facts: PlanFacts;
+  themes: { ref: string; name: string; description: string }[];
+  clusters: { ref: string; themeRef: string; title: string; problem: string }[];
+  weeks: {
+    weekStart: string;
+    clusterRef: string;
+    idea: string;
+    outline: PlanOutlineItem[] | null;
+  }[];
+}
+// An instant idea has no day slot and no angle: `kind` is INSTANT_IDEA, `dayIndex` and `angle` are null.
+export interface PlanDayView {
+  id: string;
+  kind: 'PLANNED' | 'INSTANT_IDEA';
+  date: string;
+  dayIndex: number | null;
+  title: string;
+  angle: Angle | null;
+  why: string;
+  beats: PlanBeat[];
+  closingLine: string;
+  status: 'PLANNED' | 'RECORDED' | 'MISSED';
+  busy: boolean;
+  version: number;
+}
+// The owner's own video as the page draws it; DRAFT is the script waiting for the owner to add it to the plan.
+export interface PlanInstantIdeaView {
+  id: string;
+  date: string;
+  idea: string;
+  title: string;
+  why: string;
+  beats: PlanBeat[];
+  closingLine: string;
+  status: 'DRAFT' | 'PLANNED' | 'RECORDED' | 'MISSED';
+}
+export interface PlanWeekView {
+  id: string;
+  weekStart: string;
+  weekEnd: string;
+  idea: string;
+  brief: string | null;
+  urgentNote: string | null;
+  status: 'IDEA' | 'GENERATING' | 'READY' | 'FAILED';
+  days: PlanDayView[];
+}
+export interface PlanUpcomingView {
+  id: string;
+  weekStart: string;
+  idea: string;
+  ideaEdited: boolean;
+  theme: string;
+}
+// One video of the week as the phone gets it (`GET /public/v1/content-plan/week`).
+export interface PhoneDayView {
+  id: string;
+  kind: 'PLANNED' | 'INSTANT_IDEA';
+  date: string;
+  dayIndex: number | null;
+  title: string;
+  angle: string | null;
+  why: string;
+  beats: PlanBeat[];
+  closingLine: string;
+  status: 'PLANNED' | 'RECORDED' | 'MISSED';
+  version: number;
+}
+// The week the phone shows: `week` is the one that contains `today`; `days` is [] unless the week is READY.
+export interface PhoneWeekView {
+  status: PlanStatus;
+  today: string;
+  timezone: string;
+  week: {
+    id: string;
+    weekStart: string;
+    weekEnd: string;
+    idea: string;
+    status: 'IDEA' | 'GENERATING' | 'READY' | 'FAILED';
+    days: PhoneDayView[];
+  } | null;
+}
+export interface PlanView {
+  status: PlanStatus;
+  canEdit: boolean;
+  videosPerWeek: number;
+  prefill: string;
+  sourceText: string | null;
+  direction: string | null;
+  facts: PlanFacts | null;
+  busy: string | null;
+  notice: string | null;
+  round: {
+    id: string;
+    index: number;
+    direction: string;
+    questions: PlanQuestion[];
+    readyForPlan: boolean;
+  } | null;
+  proposal: PlanProposal | null;
+  themes: { id: string; name: string }[];
+  // The owner's open instant idea (still refining, refined and not added yet, or failed); null when there is none.
+  instantDraft: PlanInstantIdeaView | null;
+  today: string;
+}
+
+// A required text: trimmed, not empty, at most `max` characters.
+const text = (max: number) => z.string().trim().min(1).max(max);
+const id = z.string().min(1).max(64);
+const videosPerWeek = z
+  .number()
+  .int()
+  .refine(
+    (value) => (VIDEOS_PER_WEEK as readonly number[]).includes(value),
+    'must be a whole number from 1 to 7'
+  );
+const videoSeconds = z
+  .number()
+  .refine(
+    (value) => (VIDEO_SECONDS as readonly number[]).includes(value),
+    'must be 30, 60, 90 or 120'
+  );
+// A calendar date as YYYY-MM-DD.
+const date = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-11-22')
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
+  }, 'must be a real date');
+
+// One answer to a question of a setup round: a chosen option, an "Other" text, or both.
+// Typed as PlanAnswer because the repo builds with strictNullChecks off, where z.infer makes every key optional.
+const PlanAnswerSchema = z
+  .object({
+    questionId: id,
+    optionId: id.nullable().default(null),
+    other: z.string().trim().max(LIMITS.other).nullable().default(null),
+  })
+  .strict()
+  .refine((answer) => !!answer.optionId || !!answer.other, {
+    message: 'needs an option or a text',
+  }) as z.ZodType<PlanAnswer, z.ZodTypeDef, unknown>;
+
+// The facts about the business the AI filled in and the owner may edit.
+export const FactsSchema = z
+  .object({
+    facts: z
+      .object({
+        whatWeDo: text(2000),
+        audience: text(2000),
+        problems: z.array(text(500)).max(20),
+        solution: text(2000),
+        objections: z.array(text(500)).max(20),
+        tone: text(500),
+        videoSeconds,
+      })
+      .strict(),
+  })
+  .strict();
+
+// The body of `POST /content-plan/setup/start`.
+export const StartSetupSchema = z
+  .object({ sourceText: text(LIMITS.sourceText) })
+  .strict();
+
+// The body of `POST /content-plan/setup/answer`.
+export const AnswerSetupSchema = z
+  .object({
+    roundId: id,
+    direction: text(LIMITS.direction),
+    answers: z.array(PlanAnswerSchema).max(4),
+  })
+  .strict();
+
+// The body of `POST /content-plan/proposal`.
+export const ProposeSchema = z
+  .object({
+    direction: text(LIMITS.direction),
+    videosPerWeek,
+    answers: z.array(PlanAnswerSchema).max(4).optional(),
+  })
+  .strict();
+
+// The body of `POST /content-plan/proposal/revise`.
+export const ReviseSchema = z
+  .object({
+    proposalVersion: z.number().int().min(0),
+    feedback: text(LIMITS.feedback),
+  })
+  .strict();
+
+// The body of `POST /content-plan/confirm`.
+export const ConfirmSchema = z
+  .object({ proposalVersion: z.number().int().min(0) })
+  .strict();
+
+// The body of `PUT /content-plan/direction`.
+export const DirectionSchema = z
+  .object({ direction: text(LIMITS.direction) })
+  .strict();
+
+// The body of `PUT /content-plan/weeks/:id/brief`.
+export const BriefSchema = z.object({ brief: text(LIMITS.brief) }).strict();
+
+// The body of `PUT /content-plan/weeks/:id/idea`.
+export const IdeaSchema = z.object({ idea: text(LIMITS.idea) }).strict();
+
+// The body of `POST /content-plan/weeks/:id/urgent`.
+export const UrgentSchema = z
+  .object({ note: text(LIMITS.urgentNote) })
+  .strict();
+
+// The body of `PUT /content-plan/videos-per-week`.
+export const VideosPerWeekSchema = z.object({ videosPerWeek }).strict();
+
+// The body of `POST /content-plan/instant-ideas`: the owner's own idea and the day it is for.
+export const InstantIdeaSchema = z
+  .object({ idea: text(LIMITS.idea), date })
+  .strict();

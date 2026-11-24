@@ -1,0 +1,101 @@
+{
+  "status": "ACTIVE",
+  "today": "2026-11-23",
+  "timezone": "UTC",
+  "week": {
+    "id": "test-week-1",
+    "weekStart": "2026-11-23",
+    "weekEnd": "2026-11-29",
+    "idea": "Dentist on camera walks through what calm care during a checkup generally looks like with time to ask questions, and invites you to book a checkup when you feel ready.",
+    "status": "READY",
+    "days": [
+      {
+        "id": "test-day-1",
+        "date": "2026-11-23",
+        "dayIndex": 0,
+        "title": "Worried it will hurt? See what calm care at a checkup",
+        "angle": "problem",
+        "why": "Helps adults who delay visits from fear of pain understand what a calm checkup is like.",
+        "beats": [
+          {
+            "hook": "Fear of pain",
+            "say": "If you're putting off the dentist because you're afraid it will hurt, you're not alone. Many working adults feel the same way. And a first checkup is a calm place to start."
+          },
+          {
+            "hook": "Gentle look first",
+            "say": "We start by talking through how you're feeling and what to expect. Then we look around gently and explain what we see. You can ask questions at any point."
+          },
+          {
+            "hook": "Time for questions",
+            "say": "We go at a pace that feels okay for you, with time to pause if you need to. There's no rush to decide anything on the spot. It's mostly about understanding your teeth and gums, with cleaning mentioned only if helpful."
+          },
+          {
+            "hook": "Small steps early",
+            "say": "Coming for regular checkups helps us notice small changes early, which can help avoid bigger treatment later. If you have kids, the same gentle start applies for them too."
+          }
+        ],
+        "closingLine": "When you feel ready, you're welcome to book a checkup with us.",
+        "status": "PLANNED",
+        "version": 1
+      },
+      {
+        "id": "test-day-2",
+        "date": "2026-11-25",
+        "dayIndex": 2,
+        "title": "Putting off a checkup from fear? Book a checkup instead of",
+        "angle": "mistake",
+        "why": "Speaks to busy adults who wait from fear and end up facing longer visits.",
+        "beats": [
+          {
+            "hook": "Waiting from fear",
+            "say": "If fear keeps you from booking, it's easy to wait and hope the worry goes away. Many busy adults between work and family do exactly that. But waiting usually makes the anxiety bigger, not smaller."
+          },
+          {
+            "hook": "Common waiting mistake",
+            "say": "A common mistake is staying away until a small concern starts to bother you more. By then you need more time in the chair, which is what you wanted to avoid. A checkup early on is simpler to face."
+          },
+          {
+            "hook": "A calmer option",
+            "say": "Instead of waiting, you can book a first visit just to talk and have a gentle look. You can share what worries you and ask anything you like. We keep it calm and explain each step."
+          },
+          {
+            "hook": "Early checkups help",
+            "say": "Regular checkups help us spot small changes early, so you are less likely to need bigger treatment later. That can feel easier on your mind and your schedule too."
+          }
+        ],
+        "closingLine": "If that sounds helpful, feel free to book a checkup when you're ready.",
+        "status": "PLANNED",
+        "version": 1
+      },
+      {
+        "id": "test-day-3",
+        "date": "2026-11-27",
+        "dayIndex": 4,
+        "title": "Imagine someone who keeps putting off a first visit, then",
+        "angle": "story",
+        "why": "Shows parents and working adults how a gentle first checkup can ease fear of pain.",
+        "beats": [
+          {
+            "hook": "Putting off a visit",
+            "say": "Imagine someone who keeps putting off a first visit because they are scared it will hurt. They are busy with work and looking after young children. So the dentist keeps slipping to the bottom of the list."
+          },
+          {
+            "hook": "Worry building up",
+            "say": "After a while, they feel nervous even thinking about booking. They imagine the worst and worry about cost and time too. That is very common for parents and busy adults."
+          },
+          {
+            "hook": "A calm first visit",
+            "say": "Then one day they book a checkup just to talk and ask questions. The visit is calm, with a gentle look and clear explanations. There is time to pause and no pressure to decide anything."
+          },
+          {
+            "hook": "Steadier next steps",
+            "say": "They leave knowing what is going on and what to do next, including cleaning or fillings only if needed. Coming regularly helps catch small things early and avoid bigger treatment. It feels more manageable from there."
+          }
+        ],
+        "closingLine": "When you feel ready, you are welcome to book a checkup for yourself or your family.",
+        "status": "PLANNED",
+        "version": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+// Feature: Global Settings View (Date Metrics, Notifications, Shortlinks, Account Deletion)
+'use client';
+
+import React from 'react';
+import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import dynamic from 'next/dynamic';
+import EmailNotificationsComponent from '@gitroom/frontend/components/settings/email-notifications.component';
+import ShortlinkPreferenceComponent from '@gitroom/frontend/components/settings/shortlink-preference.component';
+import DeleteAccountComponent from '@gitroom/frontend/components/settings/delete-account.component';
+
+const MetricComponent = dynamic(
+  () => import('@gitroom/frontend/components/settings/metric.component'),
+  {
+    ssr: false,
+  }
+);
+
+// Renders the global settings panel aggregating user and workspace preferences.
+export const GlobalSettings = () => {
+  const t = useT();
+  return (
+    <div className="flex flex-col">
+      <h3 className="text-[20px]">{t('global_settings', 'Global Settings')}</h3>
+      <MetricComponent />
+      <EmailNotificationsComponent />
+      <ShortlinkPreferenceComponent />
+      <DeleteAccountComponent />
+    </div>
+  );
+};
