@@ -22,7 +22,7 @@ x-logging: &logging
 
 services:
   app:
-    image: ${APP_IMAGE:-ghcr.io/partho5/social-media-manager:latest}
+    image: ${APP_IMAGE:-ghcr.io/partho5/postiz-clone-public:latest}
     container_name: app
     restart: always
     env_file: .env

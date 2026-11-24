@@ -49,7 +49,7 @@ The server never builds. If the image is private, log in once:
 | Value | Used for |
 |---|---|
 | `DOMAIN` | public name, e.g. `app.example.com`. DNS A record must already point at this server. The phone app's base URL is `https://<DOMAIN>/api`, so this is chosen once. |
-| image tag | `APP_IMAGE` in env.example is `ghcr.io/partho5/social-media-manager:latest`. Ask if a pinned tag (`v1.2.3` or a short sha) or another owner is wanted. |
+| image tag | `APP_IMAGE` in env.example is `ghcr.io/partho5/postiz-clone-public:latest`. Ask if a pinned tag (`v1.2.3` or a short sha) or another owner is wanted. |
 | Mailgun | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN` (verified sending domain), `MAILGUN_REGION` (`us`/`eu`), `EMAIL_FROM_ADDRESS` on that domain. Without it nobody can sign in. |
 | PayPal | `PAYPAL_MODE` (`live` or `sandbox`; picks `https://api-m.paypal.com` or `https://api-m.sandbox.paypal.com`, `PAYPAL_API_BASE` overrides it), `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, all from an app of that mode |
 | Cloudflare R2 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY`, `CLOUDFLARE_SECRET_ACCESS_KEY`, `CLOUDFLARE_BUCKETNAME`, `CLOUDFLARE_BUCKET_URL` |
