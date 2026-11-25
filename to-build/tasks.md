@@ -1515,10 +1515,16 @@ Options: a temporary schema file with `shadowDatabaseUrl = env(...)`, or `hidepi
 affects other sites). Decide before coding; migrate-deploy.sh runs on every production deploy.
 
 ## Progress (deploy)
-- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [ ] D6 [x] D7 [ ] D8 [ ] D9 [ ] D10 [ ] D11
+- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [x] D6 [x] D7 [ ] D8 [ ] D9 [ ] D10 [ ] D11
 - D3/D4/D5/D7 code is in the repo and tested locally with a stand-in docker (pinned build, state file, backup and
   retention, rollback, refused requests, edited-file guard, deploy surviving a dropped SSH connection, exit codes).
-  Still to do on the server (D3b): make `/var/www/smm` a git checkout of the repo and point the forced command at
-  `remote-deploy.sh 2gb`. Until then CI's "deploy <sha>" reaches the old forced command, which ignores it (safe).
+  D3b done 2026-11-25 on the server, under the deploy lock: `/var/www/smm` is a sparse checkout (deploy/,
+  dynamicconfig/, .gitignore) of the public repo, `deploy/.env` byte-identical, backups in
+  `backups/pre-checkout-20261125-062614.tgz` and `~/.ssh/authorized_keys.bak-20261125-062614`; the CI key's forced
+  command is `sh /var/www/smm/deploy/scripts/remote-deploy.sh 2gb`. Only `HANDOFF.md` is untracked.
+- D6: `deploy/scripts/bootstrap.sh` tested twice in a clean Debian 13 container (docker and systemctl stubbed): Caddy
+  path and host-nginx path (site added, `nginx -t` passes, reload), secrets generated once and kept on rerun, signing
+  key in the one-line `\n` form, the deploy key with its forced command, the list of owner values left to fill, and the
+  first deploy through remote-deploy.sh once they are filled. A real fresh VPS run is D9.
 - CI: build cancellation moved from the workflow to the build job, so a newer push never cancels a running deploy.
   Repository variables `DEPLOY_USER` and `DEPLOY_URL` are set.
