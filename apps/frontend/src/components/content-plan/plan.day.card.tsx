@@ -96,11 +96,11 @@ export const PlanDayCard: FC<{
   }, [day.id, send]);
 
   return (
-    <div className="flex flex-col gap-[10px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
+    <div className="flex flex-col gap-[14px] bg-newBgColorInner rounded-[16px] p-[20px] sm:p-[24px] border border-newTextColor/15 min-w-0">
       {day.busy && <PlanThinking />}
       <div className={day.busy ? 'flex flex-col gap-[10px] opacity-50' : 'flex flex-col gap-[10px]'}>
         <div className="flex items-center gap-[8px] flex-wrap">
-          <span className="text-newTextColor/70 text-[13px]">{planDate(day.date)}</span>
+          <span className="text-newTextColor/60 text-[15px]">{planDate(day.date)}</span>
           <PlanAngleChip angle={day.angle} />
           {recorded && (
             <span className="text-green-400 text-[13px]">
@@ -109,7 +109,7 @@ export const PlanDayCard: FC<{
             </span>
           )}
           {missed && !recorded && (
-            <span className="text-newTextColor/70 text-[13px]">
+            <span className="text-newTextColor/60 text-[15px]">
               {t('plan_missed', 'Missed')}
             </span>
           )}
@@ -123,7 +123,7 @@ export const PlanDayCard: FC<{
         <ol className="flex flex-col gap-[10px] list-decimal ps-[20px]">
           {day.beats.map((beat, index) => (
             <li key={index} className="min-w-0">
-              <div className="text-newTextColor/70 text-[12px]">
+              <div className="text-newTextColor/60 text-[14px]">
                 {t('plan_on_screen', 'On screen')}
               </div>
               <div dir="auto" className="font-[600] break-words">
@@ -131,7 +131,7 @@ export const PlanDayCard: FC<{
               </div>
               {showScript && (
                 <>
-                  <div className="text-newTextColor/70 text-[12px] mt-[4px]">
+                  <div className="text-newTextColor/60 text-[14px] mt-[4px]">
                     {t('plan_you_say', 'You say')}
                   </div>
                   <div dir="auto" className="whitespace-pre-line break-words">
@@ -153,7 +153,7 @@ export const PlanDayCard: FC<{
             : t('plan_show_script', 'Show script')}
         </button>
         <div className="flex flex-col">
-          <div className="text-newTextColor/70 text-[12px]">
+          <div className="text-newTextColor/60 text-[14px]">
             {t('plan_closing_line', 'Closing line')}
           </div>
           <div dir="auto" className="whitespace-pre-line break-words">

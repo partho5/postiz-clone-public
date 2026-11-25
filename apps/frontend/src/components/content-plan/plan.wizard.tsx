@@ -42,7 +42,7 @@ const PlanStepBar: FC<{
               aria-current={active ? 'step' : undefined}
               onClick={() => onGo(step.key)}
               className={clsx(
-                'flex items-center gap-[8px] rounded-full border px-[12px] min-h-[36px] text-[14px] transition-colors',
+                'flex items-center gap-[10px] rounded-full border px-[16px] min-h-[44px] text-[16px] transition-colors',
                 active
                   ? 'border-btnPrimary bg-btnPrimary/15 font-[600]'
                   : reached
@@ -53,7 +53,7 @@ const PlanStepBar: FC<{
               <span
                 aria-hidden="true"
                 className={clsx(
-                  'flex items-center justify-center h-[20px] w-[20px] rounded-full text-[12px]',
+                  'flex items-center justify-center h-[24px] w-[24px] rounded-full text-[13px]',
                   active || done
                     ? 'bg-btnPrimary text-white'
                     : 'border border-newTextColor/40'
@@ -158,7 +158,7 @@ export const PlanWizard: FC<{ plan: PlanView }> = ({ plan }) => {
 
   const labelOf = steps.find((step) => step.key === current)?.label;
   return (
-    <div className="flex flex-col gap-[20px]" ref={root}>
+    <div className="flex flex-col gap-[28px]" ref={root}>
       <PlanStepBar
         steps={steps}
         current={current}
@@ -189,7 +189,7 @@ export const PlanWizard: FC<{ plan: PlanView }> = ({ plan }) => {
                   `plan-step plan-out-${direction} absolute inset-x-0 top-0 pointer-events-none`
               )}
             >
-              <h2 className="text-[20px] font-[600] mb-[12px]">{step.label}</h2>
+              <h2 className="text-[24px] sm:text-[28px] font-[700] mb-[20px]">{step.label}</h2>
               {step.key === 'business' ? (
                 <PlanStartStep plan={plan} nav={nav} />
               ) : step.key === 'plan' ? (

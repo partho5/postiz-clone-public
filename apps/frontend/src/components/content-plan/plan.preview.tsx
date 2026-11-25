@@ -38,7 +38,7 @@ const Fact: FC<{ label: string; value: string | string[] }> = ({
   }
   return (
     <div className="flex flex-col">
-      <div className="text-newTextColor/70 text-[13px]">{label}</div>
+      <div className="text-newTextColor/60 text-[15px]">{label}</div>
       <div dir="auto" className="whitespace-pre-line break-words">
         {text}
       </div>
@@ -71,7 +71,7 @@ const PlanFactsText: FC<{ facts: PlanFacts }> = ({ facts }) => {
 // One of the first weeks in full: its dates, its idea and one title with an angle chip per video.
 const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({ week }) => (
   <div className="flex flex-col gap-[8px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
-    <div className="text-newTextColor/70 text-[13px]">{planWeekRange(week.weekStart)}</div>
+    <div className="text-newTextColor/60 text-[15px]">{planWeekRange(week.weekStart)}</div>
     <div dir="auto" className="font-[600] break-words">
       {week.idea}
     </div>
@@ -184,7 +184,7 @@ export const PlanPreview: FC<{ plan: PlanView; onBack?: () => void }> = ({
           <ul className="flex flex-col gap-[10px] mt-[10px]">
             {laterWeeks.map((week) => (
               <li key={week.weekStart} className="flex flex-col">
-                <span className="text-newTextColor/70 text-[13px]">
+                <span className="text-newTextColor/60 text-[15px]">
                   {planWeekRange(week.weekStart)}
                 </span>
                 <span dir="auto" className="break-words">

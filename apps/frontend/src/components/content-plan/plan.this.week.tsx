@@ -107,7 +107,7 @@ export const PlanThisWeek: FC<{
   return (
     <div className="flex flex-col gap-[12px]">
       <PlanSection title={t('plan_this_week', 'This week')}>
-        <div className="text-newTextColor/70 text-[13px]">
+        <div className="text-newTextColor/60 text-[15px]">
           {planWeekRange(week.weekStart)}
         </div>
         <div dir="auto" className="font-[600] break-words">

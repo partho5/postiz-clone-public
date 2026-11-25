@@ -47,7 +47,7 @@ const PlanUpcomingWeek: FC<{
 
   return (
     <li className="flex flex-col gap-[6px] min-w-0">
-      <span className="text-newTextColor/70 text-[13px]">
+      <span className="text-newTextColor/60 text-[15px]">
         {planWeekRange(week.weekStart)}
       </span>
       {editing ? (

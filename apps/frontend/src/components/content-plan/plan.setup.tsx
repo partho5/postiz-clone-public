@@ -241,7 +241,7 @@ export const PlanRoundStep: FC<{
       : null;
 
   return (
-    <div className="flex flex-col gap-[16px]">
+    <div className="flex flex-col gap-[24px]">
       {plan.notice === 'proposal_failed' && isLatest && (
         <PlanFailed
           text={t(
@@ -262,7 +262,7 @@ export const PlanRoundStep: FC<{
           className={clsx(PLAN_TEXTAREA, 'min-h-[220px]')}
           onChange={(event) => setDirection(event.target.value)}
         />
-        <div className="text-newTextColor/70 text-[13px]">
+        <div className="text-newTextColor/60 text-[15px]">
           {t('plan_understood_note', "Edit anything that's not right")}
         </div>
       </div>
@@ -281,7 +281,7 @@ export const PlanRoundStep: FC<{
 
       {isLatest && (
         <div className="flex flex-col gap-[6px]">
-          <div className="text-[14px]">
+          <div className="text-[17px] font-[600]">
             {t('plan_videos_per_week', 'Videos per week')}
           </div>
           <select
@@ -289,7 +289,7 @@ export const PlanRoundStep: FC<{
             disabled={disabled}
             aria-label={t('plan_videos_per_week', 'Videos per week')}
             onChange={(event) => setVideosPerWeek(Number(event.target.value))}
-            className="bg-newBgColorInner h-[48px] border border-newTextColor/30 rounded-[10px] px-[10px] text-[14px] text-textColor w-full sm:w-[120px]"
+            className="bg-newBgColorInner h-[56px] border-2 border-newTextColor/15 rounded-[14px] px-[14px] text-[17px] text-textColor w-full sm:w-[160px] focus:border-btnPrimary outline-none"
           >
             {VIDEOS_PER_WEEK.map((count) => (
               <option key={count} value={count}>
@@ -297,7 +297,7 @@ export const PlanRoundStep: FC<{
               </option>
             ))}
           </select>
-          <div className="text-newTextColor/70 text-[13px]">
+          <div className="text-newTextColor/60 text-[15px]">
             {t(
               'plan_videos_per_week_help',
               'How many videos can you make a week? You can change this later; it applies from the next week.'
