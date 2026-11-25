@@ -1499,5 +1499,26 @@ SSH user and path come from repository variables (`DEPLOY_USER`, `DEPLOY_PATH`);
 Run bootstrap on a throwaway VM (local VM or a cheap fresh VPS) end to end, then destroy it.
 **Done when:** the rehearsal reaches the acceptance checks of DEPLOY_GUIDE.md section 6.
 
+## D10 — Smaller app image, faster deploys
+The image is about 7.4 GB; pulling it took about 7 minutes of a deploy on 2026-11-25. Find what makes it big (dev
+dependencies, build caches, the whole pnpm store) and slim `Dockerfile.dev` without changing what runs.
+**Done when:** the image is measured smaller and a deploy's pull step is shorter, with the app unchanged.
+
+## D11 — No database password on a command line
+`money-roles.sh` passes `DATABASE_WORKER_URL` (with its password) to `prisma db execute --url`, so any user on the
+server sees it in `ps` while a deploy runs. Pass it through the environment instead.
+**Done when:** `ps` during a migration shows no password.
+Found 2026-11-25: `migrate-deploy.sh` also passes `DATABASE_URL` as an argument (`db execute --url`, `migrate diff
+--from-url/--to-url`, and `--shadow-database-url`, which has no environment form in Prisma 6). `db execute` and the
+from/to sides can move to `--schema` / `--*-schema-datasource` with the URL in the environment; the shadow URL cannot.
+Options: a temporary schema file with `shadowDatabaseUrl = env(...)`, or `hidepid` on the host's /proc (server-wide,
+affects other sites). Decide before coding; migrate-deploy.sh runs on every production deploy.
+
 ## Progress (deploy)
-- [x] D1 [x] D2 [ ] D3 [ ] D4 [ ] D5 [ ] D6 [ ] D7 [ ] D8 [ ] D9
+- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [ ] D6 [x] D7 [ ] D8 [ ] D9 [ ] D10 [ ] D11
+- D3/D4/D5/D7 code is in the repo and tested locally with a stand-in docker (pinned build, state file, backup and
+  retention, rollback, refused requests, edited-file guard, deploy surviving a dropped SSH connection, exit codes).
+  Still to do on the server (D3b): make `/var/www/smm` a git checkout of the repo and point the forced command at
+  `remote-deploy.sh 2gb`. Until then CI's "deploy <sha>" reaches the old forced command, which ignores it (safe).
+- CI: build cancellation moved from the workflow to the build job, so a newer push never cancels a running deploy.
+  Repository variables `DEPLOY_USER` and `DEPLOY_URL` are set.

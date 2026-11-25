@@ -14,13 +14,14 @@ permissions:
   contents: read
   packages: write
 
-concurrency:
-  group: build-image-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A newer push replaces a build still running. Only the build: a deploy that has started always finishes (its own
+    # group below), because stopping it half way could leave a migration half applied.
+    concurrency:
+      group: build-image-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 
@@ -65,14 +66,27 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-          # The key's entry in the VPS ~/.ssh/authorized_keys is a forced command (restrict), so whatever is asked here, the
-          # VPS runs only: flock /tmp/smm-deploy.lock sh /var/www/smm/deploy/scripts/deploy.sh 2gb
-          # (pull the image, migrate, recreate what changed, wait for the app). The word below is only a label.
+          # The key's entry in the VPS ~/.ssh/authorized_keys is a forced command (restrict) that runs only
+          # deploy/scripts/remote-deploy.sh <tier>: it moves the server's checkout to this commit and deploys the image
+          # built above (tag sha-<7 chars>). It reads nothing from this request but "deploy <commit sha>".
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
-              -o ServerAliveInterval=30 linton@"$DEPLOY_HOST" deploy
-          
+              -o ServerAliveInterval=30 "${DEPLOY_USER:?set the repository variable DEPLOY_USER}@$DEPLOY_HOST" \
+              "deploy $GITHUB_SHA"
+
+      # Through the public domain (DNS, TLS, the edge proxy and the app together), not only inside the container.
+      - name: Check the site answers
+        env:
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${DEPLOY_URL:?set the repository variable DEPLOY_URL}/api/" || true)
+            [ "$code" = 200 ] && { echo "$DEPLOY_URL/api/ answered 200"; exit 0; }
+            echo "attempt $attempt: $code"; sleep 10
+          done
+          echo "::error::$DEPLOY_URL/api/ did not answer 200 after the deploy"; exit 1
