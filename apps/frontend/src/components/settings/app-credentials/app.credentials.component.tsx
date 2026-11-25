@@ -157,11 +157,11 @@ const AppCredentialsProviderForm: FC<{
             {t('app_credentials_callback_url', 'Callback / redirect URL')}
           </div>
           <div className="flex gap-[8px] items-center">
-            <div className="flex-1 bg-newBgColorInner border border-newBorder rounded-[8px] px-[12px] py-[10px] text-[12px] break-all">
+            <div className="flex-1 bg-newBgColorInner border border-newTextColor px-[12px] py-[10px] text-[12px] break-all">
               {provider.callbackUrl}
             </div>
             <Button
-              secondary
+              className="!bg-cyan-600"
               onClick={() => {
                 copy(provider.callbackUrl!);
                 toaster.show(t('copied', 'Copied to clipboard'), 'success');
@@ -183,7 +183,6 @@ const AppCredentialsProviderForm: FC<{
         <div key={field.key} className="flex flex-col gap-[4px]">
           <div className="flex items-center gap-[8px] text-[13px]">
             <span className="font-[600]">{field.label}</span>
-            <span className="text-textItemBlur text-[12px]">{field.key}</span>
             {field.optional && (
               <span className="text-textItemBlur text-[12px]">
                 {t('optional', 'Optional')}
@@ -197,6 +196,7 @@ const AppCredentialsProviderForm: FC<{
           </div>
           <Input
             label=""
+            className="!rounded-none !border-newTextColor"
             name={`app_credential_${field.key}`}
             disableForm
             removeError
@@ -315,7 +315,12 @@ export const AppCredentialsComponent: FC = () => {
             ref={
               provider.identifier === url.get('provider') ? linked : undefined
             }
-            className="border border-newBorder rounded-[8px] p-[12px]"
+            className={clsx(
+              'border rounded-[8px] p-[12px]',
+              open === provider.identifier
+                ? 'border-green-500'
+                : 'border-newBorder'
+            )}
           >
             <div
               className="flex items-center gap-[12px] cursor-pointer"

@@ -6,8 +6,7 @@ import React, { FC } from 'react';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { PlanActive } from '@gitroom/frontend/components/content-plan/plan.active';
-import { PlanPreview } from '@gitroom/frontend/components/content-plan/plan.preview';
-import { PlanSetup } from '@gitroom/frontend/components/content-plan/plan.setup';
+import { PlanWizard } from '@gitroom/frontend/components/content-plan/plan.wizard';
 import { useContentPlan } from '@gitroom/frontend/components/content-plan/use.content.plan';
 
 // The page: the plan of the workspace, drawn by its status.
@@ -31,12 +30,12 @@ export const ContentPlanComponent: FC = () => {
       <div className="text-[24px] font-[600]">
         {t('plan_page_title', 'Content plan')}
       </div>
-      {plan.status === 'PROPOSED' || plan.busy === 'proposal' ? (
-        <PlanPreview plan={plan} />
-      ) : plan.status === 'ACTIVE' ? (
-        <PlanActive plan={plan} />
+      {plan.status === 'ACTIVE' && plan.busy !== 'proposal' ? (
+        <div className="plan-step plan-in-next">
+          <PlanActive plan={plan} />
+        </div>
       ) : (
-        <PlanSetup plan={plan} />
+        <PlanWizard plan={plan} />
       )}
     </div>
   );

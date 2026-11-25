@@ -206,3 +206,40 @@ describe('super admin area: one gate on the /super-admin URL', () => {
     expect(mockInternalFetch).not.toHaveBeenCalled();
   });
 });
+
+describe('logout: the way out for a browser stuck with a bad session', () => {
+  it('opens for a visitor with any auth cookie, without asking the backend', async () => {
+    const response = await visit('/logout', true);
+
+    expect(sentTo(response)).toBeNull();
+    expect(mockInternalFetch).not.toHaveBeenCalled();
+  });
+
+  it('opens for a signed-out visitor too, instead of sending them to the sign-in page', async () => {
+    expect(sentTo(await visit('/logout', false))).toBeNull();
+  });
+
+  it('/auth/logout clears the auth cookie and lands on the sign-in page', async () => {
+    const response = await visit('/auth/logout', true);
+
+    expect(sentTo(response)!.pathname).toBe('/auth/login');
+    expect(response.headers.get('set-cookie')).toContain('auth=;');
+  });
+});
+
+describe('logout: GET and POST both work', () => {
+  const post = (cookie: string) =>
+    proxy(new NextRequest(`${ORIGIN}/logout`, { method: 'POST', headers: cookie ? { cookie } : {} }));
+
+  it('POST clears the auth cookie and answers 303 to the sign-in page', async () => {
+    const response = await post('auth=token');
+
+    expect(response.status).toBe(303);
+    expect(sentTo(response)!.pathname).toBe('/auth/login');
+    expect(response.headers.get('set-cookie')).toContain('auth=;');
+  });
+
+  it('POST works with no cookie too', async () => {
+    expect(sentTo(await post(''))!.pathname).toBe('/auth/login');
+  });
+});

@@ -37,14 +37,14 @@ const PlanDayMenu: FC<{ disabled: boolean; onRecorded: () => void }> = ({
         aria-expanded={open}
         aria-label={t('plan_day_more', 'More')}
         onClick={() => setOpen((held) => !held)}
-        className="min-h-[44px] min-w-[44px] rounded-[8px] border border-newTableBorder text-[18px] disabled:opacity-50"
+        className="min-h-[44px] min-w-[44px] rounded-[8px] border border-newTextColor/20 text-[18px] disabled:opacity-50"
       >
         ⋯
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute end-0 mt-[4px] z-10 min-w-[180px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[4px]"
+          className="absolute end-0 mt-[4px] z-10 min-w-[180px] bg-newBgColorInner border border-newTextColor/20 rounded-[8px] p-[4px]"
         >
           <button
             type="button"
@@ -96,11 +96,11 @@ export const PlanDayCard: FC<{
   }, [day.id, send]);
 
   return (
-    <div className="flex flex-col gap-[10px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTableBorder min-w-0">
+    <div className="flex flex-col gap-[10px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
       {day.busy && <PlanThinking />}
       <div className={day.busy ? 'flex flex-col gap-[10px] opacity-50' : 'flex flex-col gap-[10px]'}>
         <div className="flex items-center gap-[8px] flex-wrap">
-          <span className="text-textItemBlur text-[13px]">{planDate(day.date)}</span>
+          <span className="text-newTextColor/70 text-[13px]">{planDate(day.date)}</span>
           <PlanAngleChip angle={day.angle} />
           {recorded && (
             <span className="text-green-400 text-[13px]">
@@ -109,7 +109,7 @@ export const PlanDayCard: FC<{
             </span>
           )}
           {missed && !recorded && (
-            <span className="text-textItemBlur text-[13px]">
+            <span className="text-newTextColor/70 text-[13px]">
               {t('plan_missed', 'Missed')}
             </span>
           )}
@@ -117,13 +117,13 @@ export const PlanDayCard: FC<{
         <div dir="auto" className="font-[600] break-words">
           {day.title}
         </div>
-        <div dir="auto" className="text-textItemBlur break-words">
+        <div dir="auto" className="text-newTextColor/70 break-words">
           {day.why}
         </div>
         <ol className="flex flex-col gap-[10px] list-decimal ps-[20px]">
           {day.beats.map((beat, index) => (
             <li key={index} className="min-w-0">
-              <div className="text-textItemBlur text-[12px]">
+              <div className="text-newTextColor/70 text-[12px]">
                 {t('plan_on_screen', 'On screen')}
               </div>
               <div dir="auto" className="font-[600] break-words">
@@ -131,7 +131,7 @@ export const PlanDayCard: FC<{
               </div>
               {showScript && (
                 <>
-                  <div className="text-textItemBlur text-[12px] mt-[4px]">
+                  <div className="text-newTextColor/70 text-[12px] mt-[4px]">
                     {t('plan_you_say', 'You say')}
                   </div>
                   <div dir="auto" className="whitespace-pre-line break-words">
@@ -153,7 +153,7 @@ export const PlanDayCard: FC<{
             : t('plan_show_script', 'Show script')}
         </button>
         <div className="flex flex-col">
-          <div className="text-textItemBlur text-[12px]">
+          <div className="text-newTextColor/70 text-[12px]">
             {t('plan_closing_line', 'Closing line')}
           </div>
           <div dir="auto" className="whitespace-pre-line break-words">

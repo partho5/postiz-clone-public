@@ -58,7 +58,7 @@ export const PlanUrgent: FC<{ week: PlanWeekView }> = ({ week }) => {
         </Button>
       </div>
       {!!week.urgentNote && (
-        <div className="text-textItemBlur">
+        <div className="text-newTextColor/70">
           {t(
             'plan_urgent_done',
             'This week now focuses on it. The rest moves to next week.'

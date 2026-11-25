@@ -17,6 +17,10 @@ const LEGAL_PATHS = ['/terms', '/privacy', '/data-deletion'];
 // The page the app's one-time web sign-in links open (web handoff, B2)
 const WEB_HANDOFF_PATH = '/auth/continue';
 
+// The way out for a browser stuck with a session the app cannot use; it must answer whatever the cookies are.
+// GET opens the page that ends the session; POST ends it here and goes to the sign-in page.
+const LOGOUT_PATH = '/logout';
+
 // Pages a signed-out visitor returns to, query string included, after signing in (the app's upgrade link
 // opens /billing?tier=<KEY>, signed in or not)
 const RETURN_PATHS = ['/billing'];
@@ -101,6 +105,10 @@ export async function proxy(request: NextRequest) {
     return topResponse;
   }
 
+  if (nextUrl.pathname === LOGOUT_PATH && request.method !== 'POST') {
+    return topResponse;
+  }
+
   if (
     nextUrl.pathname.startsWith('/integrations/social/') &&
     nextUrl.href.indexOf('state=login') === -1
@@ -108,10 +116,14 @@ export async function proxy(request: NextRequest) {
     return topResponse;
   }
 
-  // If the URL is logout, delete the cookie and redirect to login
-  if (nextUrl.href.indexOf('/auth/logout') > -1) {
+  // If the URL is logout, delete the cookie and redirect to login (303, so a POST arrives at login as a GET)
+  if (
+    nextUrl.href.indexOf('/auth/logout') > -1 ||
+    nextUrl.pathname === LOGOUT_PATH
+  ) {
     const response = NextResponse.redirect(
-      new URL('/auth/login', nextUrl.href)
+      new URL('/auth/login', nextUrl.href),
+      303
     );
     response.cookies.set('auth', '', {
       path: '/',

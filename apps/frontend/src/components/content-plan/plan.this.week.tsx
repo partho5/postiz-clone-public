@@ -94,7 +94,7 @@ export const PlanThisWeek: FC<{
   if (!week) {
     return (
       <PlanSection title={t('plan_this_week', 'This week')}>
-        <div className="text-textItemBlur">
+        <div className="text-newTextColor/70">
           {t('plan_no_week', 'No videos are planned for this week.')}
         </div>
       </PlanSection>
@@ -107,7 +107,7 @@ export const PlanThisWeek: FC<{
   return (
     <div className="flex flex-col gap-[12px]">
       <PlanSection title={t('plan_this_week', 'This week')}>
-        <div className="text-textItemBlur text-[13px]">
+        <div className="text-newTextColor/70 text-[13px]">
           {planWeekRange(week.weekStart)}
         </div>
         <div dir="auto" className="font-[600] break-words">
@@ -132,7 +132,7 @@ export const PlanThisWeek: FC<{
         />
       )}
       {(week.status === 'IDEA' || week.status === 'GENERATING') && (
-        <div className="text-textItemBlur animate-pulse" role="status">
+        <div className="text-newTextColor/70 animate-pulse" role="status">
           {t('plan_week_writing', "Writing this week's videos…")}
         </div>
       )}

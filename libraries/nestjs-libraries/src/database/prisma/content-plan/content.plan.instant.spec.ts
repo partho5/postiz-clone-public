@@ -127,6 +127,7 @@ class FakeRepository {
     };
 
   findByOrganization = async (id: string) => (id === ORG ? this.plan : null);
+  rounds = async () => [];
   latestRound = async () => null;
   activeThemes = async () => [];
   lastWeek = async () => this.sorted().slice(-1)[0] ?? null;

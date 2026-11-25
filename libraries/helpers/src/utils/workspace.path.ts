@@ -17,6 +17,7 @@ const UNSCOPED = [
   '/terms',
   '/privacy',
   '/data-deletion',
+  '/logout',
   '/api/',
   '/w/',
 ];

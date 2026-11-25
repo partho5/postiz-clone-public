@@ -122,7 +122,7 @@ const PlanFactsForm: FC<{ plan: PlanView; facts: PlanFacts }> = ({
         className="min-h-[100px] w-full"
         onChange={(event) => set('objections', event.target.value)}
       />
-      <div className="text-textItemBlur text-[13px]">
+      <div className="text-newTextColor/70 text-[13px]">
         {t('plan_fact_one_per_line', 'One entry per line')}
       </div>
       <Input
@@ -148,7 +148,7 @@ const PlanFactsForm: FC<{ plan: PlanView; facts: PlanFacts }> = ({
               Number(event.target.value) as PlanFacts['videoSeconds']
             )
           }
-          className="bg-newBgColorInner h-[44px] border border-newTableBorder rounded-[8px] px-[10px] text-[14px] text-textColor w-full sm:w-[160px]"
+          className="bg-newBgColorInner h-[44px] border border-newTextColor/20 rounded-[8px] px-[10px] text-[14px] text-textColor w-full sm:w-[160px]"
         >
           {VIDEO_SECONDS.map((seconds) => (
             <option key={seconds} value={seconds}>
@@ -159,7 +159,7 @@ const PlanFactsForm: FC<{ plan: PlanView; facts: PlanFacts }> = ({
             </option>
           ))}
         </select>
-        <div className="text-textItemBlur text-[13px]">
+        <div className="text-newTextColor/70 text-[13px]">
           {t(
             'plan_fact_length_help',
             'A new length applies from the next week that is written.'

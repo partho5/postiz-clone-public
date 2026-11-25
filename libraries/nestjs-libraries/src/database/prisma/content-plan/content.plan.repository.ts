@@ -192,6 +192,25 @@ export class ContentPlanRepository {
     });
   }
 
+  // Takes the setup back to the round at `index`: the rounds after it are removed and a proposal written from them is
+  // dropped, so that round is the latest again.
+  rewindTo(planId: string, index: number) {
+    return this._transaction.model.$transaction([
+      this._round.model.contentPlanRound.deleteMany({
+        where: { planId, index: { gt: index } },
+      }),
+      this._plan.model.contentPlan.update({
+        where: { id: planId },
+        data: {
+          status: 'SETUP',
+          proposal: Prisma.DbNull,
+          proposalTurns: Prisma.DbNull,
+          notice: null,
+        },
+      }),
+    ]);
+  }
+
   // The latest round of the setup, or null.
   latestRound(planId: string) {
     return this._round.model.contentPlanRound.findFirst({

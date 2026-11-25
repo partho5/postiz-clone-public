@@ -108,6 +108,16 @@ class FakeRepository {
   release = async (_id: string, data: any = {}) => {
     Object.assign(this.plan, data, { busy: null });
   };
+  rewindTo = async (_id: string, index: number) => {
+    this.calls.push('rewindTo');
+    this.roundRows = this.roundRows.filter((row) => row.index <= index);
+    Object.assign(this.plan, {
+      status: 'SETUP',
+      proposal: null,
+      proposalTurns: null,
+      notice: null,
+    });
+  };
   resetSetup = async (_id: string, extra: any = {}) => {
     this.calls.push('resetSetup');
     this.roundRows = [];
@@ -384,10 +394,107 @@ describe('ContentPlanService answer', () => {
     expect(view.round?.index).toBe(1);
     expect(view.direction).toBe('Next direction');
     expect(ctx.repository.roundRows[0].answers).toEqual([
-      { questionId: 'q1', optionId: 'o2', other: null },
+      { questionId: 'q1', optionId: 'o2', optionIds: [], other: null },
     ]);
     expect(ctx.repository.roundRows[1].userTurn).toBe(call.newUserTurn);
     expect(ctx.repository.roundRows[1].assistantTurn).toBe('{"raw":"second"}');
+  });
+
+  it('sends every ticked option of a question that takes several, then the owner own words', async () => {
+    const ctx = await withRound(build());
+    await ctx.service.answer(org(), {
+      roundId: 'round-0',
+      direction: 'We bake for locals',
+      answers: [{ questionId: 'q1', optionId: null, optionIds: ['o1', 'o2'], other: 'Hotels' }],
+    });
+    expect(ctx.generator.setupRound.mock.calls[1][0].newUserTurn).toBe(
+      stableJson({
+        answers: [{ question: 'Who buys?', answer: 'Locals, Tourists, Hotels' }],
+        editedDirection: null,
+      })
+    );
+    const fresh = await withRound(build());
+    expect(
+      await codeOf(
+        fresh.service.answer(org(), {
+          roundId: 'round-0',
+          direction: 'd',
+          answers: [{ questionId: 'q1', optionId: null, optionIds: ['o1', 'o9'], other: null }],
+        })
+      )
+    ).toBe('INVALID_PLAN');
+  });
+
+  it('shows every round with its answers and the direction as the owner left it', async () => {
+    const ctx = await withRound(build());
+    await ctx.service.answer(org(), {
+      roundId: 'round-0',
+      direction: 'We bake sourdough for locals',
+      answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
+    });
+    const view = await ctx.service.view(org());
+    expect(view.rounds.map((round) => round.index)).toEqual([0, 1]);
+    expect(view.rounds[0].direction).toBe('We bake sourdough for locals');
+    expect(view.rounds[0].answers).toEqual([
+      { questionId: 'q1', optionId: 'o2', optionIds: [], other: null },
+    ]);
+    expect(view.rounds[1].answers).toBeNull();
+    expect(view.rounds[1].direction).toBe(view.direction);
+    expect(view.round?.id).toBe(view.rounds[1].id);
+  });
+
+  it('answering an earlier round drops the rounds after it and writes the next one from the changed answers', async () => {
+    const ctx = await withRound(build());
+    await ctx.service.answer(org(), {
+      roundId: 'round-0',
+      direction: 'We bake bread',
+      answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
+    });
+    ctx.repository.calls.length = 0;
+    const view = await ctx.service.answer(org(), {
+      roundId: 'round-0',
+      direction: 'We bake bread',
+      answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
+    });
+    expect(ctx.repository.calls).toContain('rewindTo');
+    expect(view.rounds.map((round) => round.index)).toEqual([0, 1]);
+    const call = ctx.generator.setupRound.mock.calls[2][0];
+    expect(call.turns).toHaveLength(2);
+    expect(call.newUserTurn).toContain('Tourists');
+    expect(ctx.repository.roundRows[0].answers[0].optionId).toBe('o2');
+  });
+
+  it('keeps the later rounds and the old answers when the AI fails while going back to an earlier round', async () => {
+    const ctx = await withRound(build());
+    await ctx.service.answer(org(), {
+      roundId: 'round-0',
+      direction: 'We bake bread',
+      answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
+    });
+    ctx.generator.setupRound.mockRejectedValueOnce(new Error('model down'));
+    await expect(
+      ctx.service.answer(org(), {
+        roundId: 'round-0',
+        direction: 'We bake bread',
+        answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
+      })
+    ).rejects.toBeDefined();
+    expect(ctx.repository.calls).not.toContain('rewindTo');
+    expect(ctx.repository.roundRows).toHaveLength(2);
+    expect(ctx.repository.roundRows[0].answers[0].optionId).toBe('o1');
+  });
+
+  it('refuses a round that is not in the plan', async () => {
+    const ctx = await withRound(build());
+    expect(
+      await codeOf(
+        ctx.service.answer(org(), {
+          roundId: 'nope',
+          direction: 'd',
+          answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
+        })
+      )
+    ).toBe('ROUND_STALE');
   });
 
   it('sends the owner own words when given, and null when the direction was not edited', async () => {

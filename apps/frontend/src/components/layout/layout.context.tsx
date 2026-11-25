@@ -110,14 +110,21 @@ function LayoutContextInner(params: { children: ReactNode }) {
         return true;
       }
 
-      if (response.status === 401 || response?.headers?.get('logout')) {
+      // The session probe (/user/self) refused the token itself (bad signature, session row gone): the
+      // proxy still sees an auth cookie, so only the proxy's logout can end it.
+      if (
+        response.status === 401 ||
+        (response.status === 403 && url === '/user/self') ||
+        response?.headers?.get('logout')
+      ) {
         if (!isSecured) {
           setCookie('auth', '', -10);
           setCookie('showorg', '', -10);
           setCookie('impersonate', '', -10);
         }
-        // eslint-disable-next-line no-restricted-syntax -- bare / exit: logout (401 or logout header)
-        window.location.href = '/';
+        // The auth cookie is httpOnly, so the page cannot clear it and '/' would be sent straight back to
+        // /launches by the proxy (which only checks the cookie exists): loop. The proxy's logout clears it.
+        window.location.href = '/auth/logout';
       }
 
       // A write that went through may have changed the balance (a post saved, moved or deleted, an
@@ -171,8 +178,8 @@ function LayoutContextInner(params: { children: ReactNode }) {
       setCookie('showorg', '', -10);
       setCookie('impersonate', '', -10);
     }
-    // eslint-disable-next-line no-restricted-syntax -- bare / exit: logout (session lost)
-    window.location.href = '/';
+    // Same as a 401: only the proxy's logout can clear the httpOnly auth cookie, '/' would loop
+    window.location.href = '/auth/logout';
   }, [isSecured]);
   return (
     <FetchWrapperComponent

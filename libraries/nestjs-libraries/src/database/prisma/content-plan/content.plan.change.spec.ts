@@ -98,6 +98,7 @@ class FakeRepository {
   private withDays = (week: any) => week && { ...week, days: this.daysOf(week.id), cluster: { theme: { name: 'Theme' } } };
 
   findByOrganization = async (id: string) => (id === ORG ? this.plan : null);
+  rounds = async () => [];
   latestRound = async () => null;
   activeThemes = async () => [];
   openDraft = async () => null;

@@ -25,7 +25,7 @@ export const PlanAngleChip: FC<{ angle: Angle | string | null }> = ({ angle }) =
     return null;
   }
   return (
-    <span className="inline-flex items-center rounded-full border border-newTableBorder px-[10px] py-[2px] text-[12px] text-textItemBlur whitespace-nowrap">
+    <span className="inline-flex items-center rounded-full border border-newTextColor/20 px-[10px] py-[2px] text-[12px] text-newTextColor/70 whitespace-nowrap">
       {label}
     </span>
   );

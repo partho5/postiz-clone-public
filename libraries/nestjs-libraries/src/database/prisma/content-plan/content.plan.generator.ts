@@ -32,6 +32,7 @@ import {
   beatsFor,
   DEFAULT_VIDEO_SECONDS,
   LIMITS,
+  MAX_ANSWER_OPTIONS,
   PlanBeat,
   PlanFacts,
   PlanQuestion,
@@ -58,7 +59,6 @@ export class PlanAiFailed extends Error {
 
 // The most questions of a setup round, options of a question and beats of a video.
 const MAX_QUESTIONS = 4;
-const MAX_OPTIONS = 4;
 const MIN_OPTIONS = 2;
 const MIN_BEATS = 3;
 const MAX_BEATS = 6;
@@ -74,9 +74,10 @@ const setupSchema = z.object({
       z.object({
         text: z.string().describe(SETUP_FIELD_HINTS.text),
         options: z.array(z.string()).describe(SETUP_FIELD_HINTS.options),
-        recommendedIndex: z
-          .number()
-          .describe(SETUP_FIELD_HINTS.recommendedIndex),
+        multiple: z.boolean().describe(SETUP_FIELD_HINTS.multiple),
+        recommendedIndexes: z
+          .array(z.number())
+          .describe(SETUP_FIELD_HINTS.recommendedIndexes),
       })
     )
     .describe(SETUP_FIELD_HINTS.questions),
@@ -314,11 +315,11 @@ export class ContentPlanGenerator {
     const questions: PlanQuestion[] = [];
     for (const question of data.questions) {
       const label = cut(question.text, LIMITS.other);
-      // the options keep their place in the answer, so `recommendedIndex` still points at the right one
+      // the options keep their place in the answer, so `recommendedIndexes` still point at the right ones
       const options = question.options
         .map((option, index) => ({ label: cut(option, LIMITS.other), index }))
         .filter((option) => option.label)
-        .slice(0, MAX_OPTIONS);
+        .slice(0, MAX_ANSWER_OPTIONS);
       if (!label || options.length < MIN_OPTIONS) {
         continue;
       }
@@ -326,9 +327,19 @@ export class ContentPlanGenerator {
         break;
       }
       const number = questions.length + 1;
-      const recommended = Math.max(
-        0,
-        options.findIndex((option) => option.index === question.recommendedIndex)
+      // the positions of the recommended options that survived; a question takes one, so only its first counts
+      const recommended = [
+        ...new Set(
+          question.recommendedIndexes.flatMap((recommendedIndex) => {
+            const position = options.findIndex(
+              (option) => option.index === recommendedIndex
+            );
+            return position < 0 ? [] : [position];
+          })
+        ),
+      ].slice(0, question.multiple ? MAX_ANSWER_OPTIONS : 1);
+      const recommendedOptionIds = (recommended.length ? recommended : [0]).map(
+        (position) => `o${position + 1}`
       );
       questions.push({
         id: `q${number}`,
@@ -337,7 +348,9 @@ export class ContentPlanGenerator {
           id: `o${index + 1}`,
           label: option.label,
         })),
-        recommendedOptionId: `o${recommended + 1}`,
+        recommendedOptionId: recommendedOptionIds[0],
+        multiple: !!question.multiple,
+        recommendedOptionIds,
       });
     }
     return {

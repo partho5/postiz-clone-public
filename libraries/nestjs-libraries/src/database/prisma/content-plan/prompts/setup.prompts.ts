@@ -14,8 +14,11 @@ Each round:
 2. The summary must also state the usual video length (30, 60, 90 or 120 seconds) and how often videos should
    mention the product or service versus teach or tell a story. When either is unknown, ask one question for it,
    with a recommended option.
-3. Ask only questions whose answer would change the plan: at most 4, each with 2 to 4 concrete options and one
-   recommended option. Keep each question short and natural. Never ask again what is already answered or written.
+3. Ask only questions whose answer would change the plan: at most 4, each with 2 to 4 concrete options and at least
+   one recommended option. A question where several options can be true at once (for example who the audience is, or
+   which topics to cover) lets the owner tick several: mark it multiple and recommend every option that fits what is
+   known. A question with one right answer (for example the video length) is not multiple and has one recommended
+   option. Keep each question short and natural. Never ask again what is already answered or written.
    Ask fewer questions each round.
 4. Set \`readyForPlan\` to true when nothing important is open.`;
 
@@ -26,7 +29,9 @@ export const SETUP_FIELD_HINTS = {
   questions: '0 to 4 questions whose answers would change the plan.',
   text: 'One short, natural question.',
   options: '2 to 4 concrete answer options, each a short text.',
-  recommendedIndex:
-    'The 0-based position, in options, of the recommended option.',
+  multiple:
+    'True when several options can be true at once and the owner may tick more than one.',
+  recommendedIndexes:
+    'The 0-based positions, in options, of the recommended options: one position, or every fitting one when multiple is true.',
   readyForPlan: 'True when nothing important is open.',
 };

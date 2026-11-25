@@ -100,6 +100,12 @@ describe('content plan body schemas', () => {
       AnswerSetupSchema.safeParse(body({ questionId: 'q1', optionId: null, other: 'my own' })).success
     ).toBe(true);
     expect(
+      AnswerSetupSchema.safeParse(body({ questionId: 'q1', optionIds: ['o1', 'o2'] })).success
+    ).toBe(true);
+    expect(
+      AnswerSetupSchema.safeParse(body({ questionId: 'q1', optionIds: ['o1', 'o2', 'o3', 'o4', 'o5'] })).success
+    ).toBe(false);
+    expect(
       ProposeSchema.safeParse({
         direction: 'd',
         videosPerWeek: 3,

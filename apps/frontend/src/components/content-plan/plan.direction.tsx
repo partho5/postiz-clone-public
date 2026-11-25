@@ -56,12 +56,12 @@ const PlanDirectionForm: FC<{ plan: PlanView }> = ({ plan }) => {
         </div>
       )}
       {replanning && (
-        <div className="text-textItemBlur" role="status">
+        <div className="text-newTextColor/70" role="status">
           {t('plan_replanning', 'Updating your coming weeks…')}
         </div>
       )}
       {!plan.busy && plan.notice === 'roadmap_updated' && (
-        <div className="text-textItemBlur" role="status">
+        <div className="text-newTextColor/70" role="status">
           {t(
             'plan_roadmap_updated',
             'Upcoming weeks updated to your new direction'

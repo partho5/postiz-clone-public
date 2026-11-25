@@ -35,6 +35,8 @@ export const LIMITS = {
   say: 2000,
   closingLine: 600,
 };
+// The most options one question of a setup round offers, and so the most one answer can tick.
+export const MAX_ANSWER_OPTIONS = 4;
 // The phone's text-slide limit.
 export const SLIDE_TEXT_MAX = 200;
 // Up to this length the phone shows a slide at full size (26sp).
@@ -80,11 +82,18 @@ export interface PlanQuestion {
   id: string;
   text: string;
   options: { id: string; label: string }[];
+  // The first recommended option; the only one a round written before several answers were allowed has.
   recommendedOptionId: string;
+  // A question the owner may answer with several options; a stored question without it takes one.
+  multiple?: boolean;
+  // Every recommended option, pre-ticked; a stored question without it recommends `recommendedOptionId` only.
+  recommendedOptionIds?: string[];
 }
 export interface PlanAnswer {
   questionId: string;
   optionId: string | null;
+  // The ticked options of a question that takes several; `optionId` stays for a question that takes one.
+  optionIds?: string[];
   other: string | null;
 }
 export interface PlanOutlineItem {
@@ -179,6 +188,16 @@ export interface PhoneWeekView {
     days: PhoneDayView[];
   } | null;
 }
+// A round of the setup as the owner sees it when going back to it: its questions, the answers given (null before the
+// owner answered) and the direction as the owner left it.
+export interface PlanRoundView {
+  id: string;
+  index: number;
+  direction: string;
+  questions: PlanQuestion[];
+  answers: PlanAnswer[] | null;
+  readyForPlan: boolean;
+}
 export interface PlanView {
   status: PlanStatus;
   canEdit: boolean;
@@ -196,6 +215,8 @@ export interface PlanView {
     questions: PlanQuestion[];
     readyForPlan: boolean;
   } | null;
+  // Every round of the setup, first to last, so the owner can go back to any of them.
+  rounds: PlanRoundView[];
   proposal: PlanProposal | null;
   themes: { id: string; name: string }[];
   // The owner's open instant idea (still refining, refined and not added yet, or failed); null when there is none.
@@ -234,12 +255,14 @@ const PlanAnswerSchema = z
   .object({
     questionId: id,
     optionId: id.nullable().default(null),
+    optionIds: z.array(id).max(MAX_ANSWER_OPTIONS).default([]),
     other: z.string().trim().max(LIMITS.other).nullable().default(null),
   })
   .strict()
-  .refine((answer) => !!answer.optionId || !!answer.other, {
-    message: 'needs an option or a text',
-  }) as z.ZodType<PlanAnswer, z.ZodTypeDef, unknown>;
+  .refine(
+    (answer) => !!answer.optionId || !!answer.optionIds.length || !!answer.other,
+    { message: 'needs an option or a text' }
+  ) as z.ZodType<PlanAnswer, z.ZodTypeDef, unknown>;
 
 // The facts about the business the AI filled in and the owner may edit.
 export const FactsSchema = z

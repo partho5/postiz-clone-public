@@ -30,7 +30,7 @@ const PlanVideosForm: FC<{ plan: PlanView }> = ({ plan }) => {
             disabled={pending || !!plan.busy}
             aria-label={t('plan_videos_per_week', 'Videos per week')}
             onChange={(event) => setVideosPerWeek(Number(event.target.value))}
-            className="bg-newBgColorInner h-[44px] border border-newTableBorder rounded-[8px] px-[10px] text-[14px] text-textColor w-full sm:w-[120px]"
+            className="bg-newBgColorInner h-[44px] border border-newTextColor/20 rounded-[8px] px-[10px] text-[14px] text-textColor w-full sm:w-[120px]"
           >
             {VIDEOS_PER_WEEK.map((count) => (
               <option key={count} value={count}>
@@ -55,7 +55,7 @@ const PlanVideosForm: FC<{ plan: PlanView }> = ({ plan }) => {
           })}
         </div>
       )}
-      <div className="text-textItemBlur text-[13px]">
+      <div className="text-newTextColor/70 text-[13px]">
         {t('plan_applies_next_week', 'Applies from next week')}
       </div>
     </PlanSection>

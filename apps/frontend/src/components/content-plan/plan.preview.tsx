@@ -3,11 +3,16 @@
 // Content plan: the proposal. The owner reads the direction, the facts, the themes and the first weeks, then confirms
 // the whole plan or says what is not right (which writes a new proposal).
 import React, { FC, useCallback, useState } from 'react';
+import clsx from 'clsx';
 import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { PlanAngleChip } from '@gitroom/frontend/components/content-plan/plan.angle.chip';
 import {
+  PLAN_OUTLINE_BUTTON,
+  PLAN_PRIMARY_BUTTON,
+  PLAN_TEXTAREA,
+  PlanBackButton,
   PlanFailed,
   PlanSection,
   PlanThinking,
@@ -33,7 +38,7 @@ const Fact: FC<{ label: string; value: string | string[] }> = ({
   }
   return (
     <div className="flex flex-col">
-      <div className="text-textItemBlur text-[13px]">{label}</div>
+      <div className="text-newTextColor/70 text-[13px]">{label}</div>
       <div dir="auto" className="whitespace-pre-line break-words">
         {text}
       </div>
@@ -65,8 +70,8 @@ const PlanFactsText: FC<{ facts: PlanFacts }> = ({ facts }) => {
 
 // One of the first weeks in full: its dates, its idea and one title with an angle chip per video.
 const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({ week }) => (
-  <div className="flex flex-col gap-[8px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTableBorder min-w-0">
-    <div className="text-textItemBlur text-[13px]">{planWeekRange(week.weekStart)}</div>
+  <div className="flex flex-col gap-[8px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
+    <div className="text-newTextColor/70 text-[13px]">{planWeekRange(week.weekStart)}</div>
     <div dir="auto" className="font-[600] break-words">
       {week.idea}
     </div>
@@ -86,7 +91,10 @@ const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({ week }) => 
 );
 
 // The proposal page. A plan that is being written again shows "Thinking…" in place of the proposal.
-export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
+export const PlanPreview: FC<{ plan: PlanView; onBack?: () => void }> = ({
+  plan,
+  onBack,
+}) => {
   const t = useT();
   const { send, pending } = usePlanRequest();
   const [asking, setAsking] = useState(false);
@@ -118,7 +126,7 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
   }, [feedback, proposal, send]);
 
   if (!proposal) {
-    return working ? <PlanThinking /> : null;
+    return working ? <PlanThinking kind="proposal" /> : null;
   }
 
   const failed = plan.notice === 'proposal_failed';
@@ -131,7 +139,7 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
         <div dir="auto" className="whitespace-pre-line break-words">
           {plan.direction}
         </div>
-        <div className="text-textItemBlur">
+        <div className="text-newTextColor/70">
           {t('plan_videos_a_week', {
             defaultValue: '{{videos}} videos a week',
             videos: plan.videosPerWeek,
@@ -150,7 +158,7 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
               key={theme.ref}
               dir="auto"
               title={theme.description}
-              className="inline-flex items-center rounded-full border border-newTableBorder px-[12px] py-[4px] break-words"
+              className="inline-flex items-center rounded-full border border-newTextColor/20 px-[12px] py-[4px] break-words"
             >
               {theme.name}
             </span>
@@ -165,7 +173,7 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
       </div>
 
       {!!laterWeeks.length && (
-        <details className="bg-newBgColorInner rounded-[12px] p-[16px] border border-newTableBorder min-w-0">
+        <details className="bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
           <summary className="cursor-pointer font-[600]">
             {t('plan_later_weeks', {
               defaultValue: 'Weeks {{from}}-{{to}}',
@@ -176,7 +184,7 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
           <ul className="flex flex-col gap-[10px] mt-[10px]">
             {laterWeeks.map((week) => (
               <li key={week.weekStart} className="flex flex-col">
-                <span className="text-textItemBlur text-[13px]">
+                <span className="text-newTextColor/70 text-[13px]">
                   {planWeekRange(week.weekStart)}
                 </span>
                 <span dir="auto" className="break-words">
@@ -188,7 +196,7 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
         </details>
       )}
 
-      {working && <PlanThinking />}
+      {working && <PlanThinking kind="proposal" />}
       {failed && !working && (
         <PlanFailed
           text={t(
@@ -218,38 +226,44 @@ export const PlanPreview: FC<{ plan: PlanView }> = ({ plan }) => {
                 dir="auto"
                 value={feedback}
                 maxLength={LIMITS.feedback}
-                className="min-h-[120px] w-full"
+                className={clsx(PLAN_TEXTAREA, 'min-h-[120px]')}
                 onChange={(event) => setFeedback(event.target.value)}
               />
               <div className="flex">
                 <Button
                   disabled={working || !feedback.trim()}
                   onClick={revise}
-                  className="min-h-[44px] w-full sm:w-auto"
+                  className={PLAN_PRIMARY_BUTTON}
                 >
                   {t('plan_revise', 'Write it again')}
                 </Button>
               </div>
             </>
           )}
-          <div className="flex flex-col sm:flex-row gap-[12px]">
-            <Button
-              disabled={working}
-              onClick={confirm}
-              className="min-h-[44px] w-full sm:w-auto"
-            >
-              {t('plan_confirm', 'Confirm plan')}
-            </Button>
-            {!asking && (
-              <Button
-                secondary
-                disabled={working}
-                onClick={() => setAsking(true)}
-                className="min-h-[44px] w-full sm:w-auto"
-              >
-                {t('plan_not_right', "Something's not right")}
-              </Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-[12px]">
+            {onBack ? (
+              <PlanBackButton onClick={onBack} disabled={working} />
+            ) : (
+              <span />
             )}
+            <div className="flex flex-col sm:flex-row gap-[12px]">
+              {!asking && (
+                <Button
+                  disabled={working}
+                  onClick={() => setAsking(true)}
+                  className={PLAN_OUTLINE_BUTTON}
+                >
+                  {t('plan_not_right', "Something's not right")}
+                </Button>
+              )}
+              <Button
+                disabled={working}
+                onClick={confirm}
+                className={PLAN_PRIMARY_BUTTON}
+              >
+                {t('plan_confirm', 'Confirm plan')}
+              </Button>
+            </div>
           </div>
         </div>
       )}

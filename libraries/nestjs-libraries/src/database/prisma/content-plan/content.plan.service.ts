@@ -234,23 +234,44 @@ export class ContentPlanService {
   }
 
   // Saves the answers and the owner's edit of the direction, then writes the next round from the whole chat so far.
+  // The round may be an earlier one (the owner went back and changed it): the rounds after it, and a proposal written
+  // from them, are dropped first, because they were written from the old answers.
   async answer(org: PlanOrganization, input: unknown): Promise<PlanView> {
     const body = this.parse(AnswerSetupSchema, input);
     const plan = await this._contentPlanRepository.findByOrganization(org.id);
     if (!plan) {
       throw new PlanNotFoundException();
     }
-    const rounds = await this._contentPlanRepository.rounds(plan.id);
-    const latest = rounds[rounds.length - 1];
-    if (plan.status !== 'SETUP' || !latest || latest.id !== body.roundId) {
+    const all = await this._contentPlanRepository.rounds(plan.id);
+    const position = all.findIndex((round) => round.id === body.roundId);
+    if (!['SETUP', 'PROPOSED'].includes(plan.status) || position < 0) {
       throw new PlanConflictException('ROUND_STALE');
     }
+    const rounds = all.slice(0, position + 1);
+    const latest = rounds[position];
     const answers = this.resolveAnswers(latest.questions, body.answers);
     await this.claim(plan.id, 'round');
     try {
-      await this._contentPlanRepository.saveAnswers(plan.id, latest.id, body.answers);
-      // the owner's edit wins, and is saved before the AI is asked again
-      await this._contentPlanRepository.update(plan.id, { direction: body.direction });
+      // read again now the plan is held: a plan confirmed since the first read is not taken back
+      const held = await this._contentPlanRepository.findByOrganization(org.id);
+      if (!held || !['SETUP', 'PROPOSED'].includes(held.status)) {
+        throw new PlanConflictException('ROUND_STALE');
+      }
+      // Going back to an earlier round (or to the last one after the proposal) changes what the later rounds and the
+      // proposal were written from, so they are dropped, but only once the AI has written the new round: a failed
+      // call leaves the plan as it was.
+      const rewinding = held.status === 'PROPOSED' || position < all.length - 1;
+      const save = async () => {
+        if (rewinding) {
+          await this._contentPlanRepository.rewindTo(plan.id, latest.index);
+        }
+        await this._contentPlanRepository.saveAnswers(plan.id, latest.id, body.answers);
+        // the owner's edit wins, and is saved before the AI is asked again
+        await this._contentPlanRepository.update(plan.id, { direction: body.direction });
+      };
+      if (!rewinding) {
+        await save();
+      }
       const turns = rounds.flatMap((round): ChatTurn[] => [
         { role: 'user', content: round.userTurn },
         { role: 'assistant', content: round.assistantTurn },
@@ -262,7 +283,8 @@ export class ContentPlanService {
         plan.id,
         latest.index + 1,
         turns,
-        stableJson({ answers, editedDirection })
+        stableJson({ answers, editedDirection }),
+        rewinding ? save : undefined
       );
     } catch (err) {
       throw this.aiError(err);
@@ -1558,13 +1580,14 @@ export class ContentPlanService {
     org: PlanOrganization,
     plan: ContentPlan | null
   ): Promise<PlanView> {
-    const [round, themes, draft] = plan
+    const [rounds, themes, draft] = plan
       ? await Promise.all([
-          this._contentPlanRepository.latestRound(plan.id),
+          this._contentPlanRepository.rounds(plan.id),
           this._contentPlanRepository.activeThemes(plan.id),
           this._contentPlanRepository.openDraft(org.id),
         ])
-      : [null, [], null];
+      : [[], [], null];
+    const round = rounds[rounds.length - 1] ?? null;
     return {
       status: plan ? (plan.status as PlanView['status']) : 'NONE',
       canEdit: canEditRole(org.users?.[0]?.role),
@@ -1584,6 +1607,14 @@ export class ContentPlanService {
             readyForPlan: round.readyForPlan,
           }
         : null,
+      rounds: rounds.map((item, index) => ({
+        id: item.id,
+        index: item.index,
+        direction: this.directionOf(item, rounds[index + 1], plan),
+        questions: item.questions as unknown as PlanQuestion[],
+        answers: (item.answers as unknown as PlanAnswer[] | null) ?? null,
+        readyForPlan: item.readyForPlan,
+      })),
       proposal:
         plan?.status === 'PROPOSED'
           ? (plan.proposal as unknown as PlanProposal | null)
@@ -1592,6 +1623,24 @@ export class ContentPlanService {
       instantDraft: draft ? this.instantView(draft, this.today(org)) : null,
       today: this.today(org),
     };
+  }
+
+  // The direction of a round as the owner left it: the edit the owner sent with the answers (kept in the next round's
+  // first turn), or for the latest round the plan's direction, which holds the owner's last edit.
+  private directionOf(
+    round: { direction: string },
+    next: { userTurn: string } | undefined,
+    plan: ContentPlan
+  ) {
+    if (!next) {
+      return plan.direction ?? round.direction;
+    }
+    try {
+      const edited = JSON.parse(next.userTurn)?.editedDirection;
+      return typeof edited === 'string' && edited ? edited : round.direction;
+    } catch {
+      return round.direction;
+    }
   }
 
   // What the first textarea starts with: the brand profile as plain lines (the name first), or empty when the profile
@@ -1661,7 +1710,8 @@ export class ContentPlanService {
     planId: string,
     index: number,
     turns: ChatTurn[],
-    newUserTurn: string
+    newUserTurn: string,
+    beforeSave?: () => Promise<void>
   ) {
     const round = await this.charge(org.id, planId, 'plan.setup_round', () =>
       this._contentPlanGenerator.setupRound({
@@ -1671,6 +1721,7 @@ export class ContentPlanService {
         newUserTurn,
       })
     );
+    await beforeSave?.();
     await this._contentPlanRepository.saveRound({
       planId,
       index,
@@ -1683,28 +1734,34 @@ export class ContentPlanService {
   }
 
   // The owner's answers as the model reads them: the question text and the answer text (the owner's own words when
-  // given, else the chosen option's text). The ids never reach the model. An answer to a question or option that is
+  // given, else the chosen options' texts, or both for ticked options). The ids never reach the model. An answer to a question or option that is
   // not in the round is refused.
   private resolveAnswers(stored: Prisma.JsonValue, answers: PlanAnswer[]) {
     const questions = stored as unknown as PlanQuestion[];
     const fields: { path: string; message: string }[] = [];
     const resolved = answers.map((answer, index) => {
       const question = questions.find((item) => item.id === answer.questionId);
-      const option = question?.options.find((item) => item.id === answer.optionId);
+      const chosen = [...new Set([answer.optionId, ...(answer.optionIds ?? [])])].filter(Boolean);
+      const labels = chosen.flatMap((optionId) => {
+        const option = question?.options.find((item) => item.id === optionId);
+        return option ? [option.label] : [];
+      });
       if (!question) {
         fields.push({
           path: `answers.${index}.questionId`,
           message: 'is not a question of this round',
         });
-      } else if (answer.optionId && !option) {
+      } else if (labels.length !== chosen.length) {
         fields.push({
-          path: `answers.${index}.optionId`,
+          path: `answers.${index}.optionIds`,
           message: 'is not an option of this question',
         });
       }
+      const other = answer.other?.trim();
       return {
         question: question?.text ?? '',
-        answer: answer.other?.trim() || option?.label || '',
+        // one option with the owner's own words: the words win; ticked options: all of them, then the words
+        answer: answer.optionId && other ? other : [...labels, other].filter(Boolean).join(', '),
       };
     });
     if (fields.length) {

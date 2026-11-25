@@ -260,8 +260,8 @@ describe('ContentPlanGenerator', () => {
 
     it('rewrites question and option ids and keeps the raw assistant text', async () => {
       const answer = setupAnswer([
-        { text: 'First?', options: ['a', 'b', 'c'], recommendedIndex: 2 },
-        { text: 'Second?', options: ['x', 'y'], recommendedIndex: 0 },
+        { text: 'First?', options: ['a', 'b', 'c'], multiple: false, recommendedIndexes: [2] },
+        { text: 'Second?', options: ['x', 'y'], multiple: false, recommendedIndexes: [0] },
       ]);
       const { result } = run(answer);
       const round = await result;
@@ -275,6 +275,8 @@ describe('ContentPlanGenerator', () => {
             { id: 'o3', label: 'c' },
           ],
           recommendedOptionId: 'o3',
+          multiple: false,
+          recommendedOptionIds: ['o3'],
         },
         {
           id: 'q2',
@@ -284,16 +286,32 @@ describe('ContentPlanGenerator', () => {
             { id: 'o2', label: 'y' },
           ],
           recommendedOptionId: 'o1',
+          multiple: false,
+          recommendedOptionIds: ['o1'],
         },
       ]);
       expect(round.assistantTurn).toBe(JSON.stringify(answer));
       expect(round.usage).toEqual(USAGE);
     });
 
+    it('keeps every recommended option of a multiple question, and only the first of a single one', async () => {
+      const { result } = run(
+        setupAnswer([
+          { text: 'Who?', options: ['a', 'b', 'c'], multiple: true, recommendedIndexes: [0, 2, 2, 9] },
+          { text: 'How long?', options: ['a', 'b', 'c'], multiple: false, recommendedIndexes: [1, 2] },
+        ])
+      );
+      const [many, one] = (await result).questions;
+      expect(many).toMatchObject({ multiple: true, recommendedOptionId: 'o1', recommendedOptionIds: ['o1', 'o3'] });
+      expect(one).toMatchObject({ multiple: false, recommendedOptionId: 'o2', recommendedOptionIds: ['o2'] });
+    });
+
     it('falls back to the first option for a bad recommendedIndex', async () => {
       for (const recommendedIndex of [-1, 7, 1.5]) {
         const { result } = run(
-          setupAnswer([{ text: 'Q?', options: ['a', 'b'], recommendedIndex }])
+          setupAnswer([
+            { text: 'Q?', options: ['a', 'b'], multiple: false, recommendedIndexes: [recommendedIndex] },
+          ])
         );
         expect((await result).questions[0].recommendedOptionId).toBe('o1');
       }
@@ -303,12 +321,12 @@ describe('ContentPlanGenerator', () => {
       const good = (n: number) => ({
         text: `Q${n}?`,
         options: ['a', 'b', 'c', 'd', 'e'],
-        recommendedIndex: 0,
+        multiple: false, recommendedIndexes: [0],
       });
       const { result } = run(
         setupAnswer([
-          { text: 'One option', options: ['a'], recommendedIndex: 0 },
-          { text: '  ', options: ['a', 'b'], recommendedIndex: 0 },
+          { text: 'One option', options: ['a'], multiple: false, recommendedIndexes: [0] },
+          { text: '  ', options: ['a', 'b'], multiple: false, recommendedIndexes: [0] },
           good(1),
           good(2),
           good(3),
