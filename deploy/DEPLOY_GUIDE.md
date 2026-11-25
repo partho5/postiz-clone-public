@@ -11,40 +11,42 @@ Reference for the pieces: [README.md](README.md).
   git-ignored; keep it that way (`chmod 600 deploy/.env`).
 - Never invent a value the operator owns (domain, Mailgun, PayPal, R2 keys). Ask for it, once, in a
   single message listing everything missing (section 3). Generate the secrets you can generate.
-- Do not skip a check, and do not mark the deploy done until section 6 passes. If a step fails, show
-  the failing command's output, say what it means, fix it if the table in section 8 covers it, otherwise
+- Do not skip a check, and do not mark the deploy done until section 5 passes. If a step fails, show
+  the failing command's output, say what it means, fix it if the table in section 7 covers it, otherwise
   stop and ask.
 - Never run `docker compose down -v`, `docker volume rm`, `docker system prune` or anything that
   deletes volumes: they hold the database.
-- Do not change files under `deploy/` except `deploy/.env`.
+- Do not change tracked files under `deploy/` on the server (the next deploy refuses to run): change them in the
+  repo. Only `deploy/.env` is edited on the server.
 
 ## 1. Preflight
 
-Run and report each result:
+Debian or Ubuntu, amd64, at least 20 GB free on `/`, root access (`sudo`). Bootstrap checks these itself and stops
+with the reason. Decide the domain before starting: the phone app's base URL is `https://<DOMAIN>/api`, so it is
+chosen once. Its DNS A record must point at this server (behind Cloudflare: point it there and use the server's IP
+for `DEPLOY_HOST`).
+
+## 2. Run bootstrap
 
 ```sh
-. /etc/os-release && echo "$PRETTY_NAME"        # Ubuntu/Debian expected
-free -m                                          # about 2 GB total on the 2gb tier
-df -h /                                          # at least 15 GB free
-docker --version && docker compose version       # both required
-sudo ss -ltnp | grep -E ':(80|443) ' || echo "ports 80/443 free"
+curl -fsSL https://raw.githubusercontent.com/partho5/postiz-clone-public/main/deploy/scripts/bootstrap.sh -o bootstrap.sh
+sudo sh bootstrap.sh --domain <DOMAIN> --email <operator email>
 ```
 
-If Docker is missing: `curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER`
-(then a new login). Ports 80 and 443 must be free and open in the provider's firewall: Caddy needs
-them for the TLS certificate.
+Options: `--user` (deploy user, default the sudo user), `--dir` (default `/var/www/smm`), `--tier` (default from the
+RAM: under 3 GB `2gb`, under 6 GB `4gb`, else `8gb`), `--repo` (another fork). It installs git and Docker, adds swap,
+creates the user, checks out `deploy/`, writes `deploy/.env` (chmod 600) with every secret it can generate, picks the
+edge (the host's nginx when one is running, with a site and a certbot certificate; else Caddy on 80/443), and adds
+the CI deploy key.
 
-## 2. Get the code, add swap
+It prints, once, the CI deploy key and the values for GitHub. Hand them to the operator **without pasting the
+private key anywhere else**: secrets `DEPLOY_SSH_KEY` and `DEPLOY_HOST`, variables `DEPLOY_USER` and `DEPLOY_URL`
+(repository > Settings > Secrets and variables > Actions). It also prints the paid-features public key `k1=...` for
+the phone app's `ENTITLEMENT_PUBLIC_KEYS`; that one is public.
 
-```sh
-git clone <repo-url> app && cd app        # skip if already cloned; then: git pull
-sudo deploy/scripts/setup-swap.sh 2G      # once; safe to repeat
-```
+## 3. Ask the operator for these, in one message
 
-The server never builds. If the image is private, log in once:
-`echo <token> | docker login ghcr.io -u <github-user> --password-stdin` (token with `read:packages`).
-
-## 3. Ask the operator for these, then write `deploy/.env`
+Bootstrap ends by listing the `<-- FILL` keys still open in `deploy/.env`:
 
 | Value | Used for |
 |---|---|
@@ -55,56 +57,11 @@ The server never builds. If the image is private, log in once:
 | Cloudflare R2 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY`, `CLOUDFLARE_SECRET_ACCESS_KEY`, `CLOUDFLARE_BUCKETNAME`, `CLOUDFLARE_BUCKET_URL` |
 | optional | `OPENAI_API_KEY`, `META_MUSE_API_KEY` (AI captions and content plan: a Meta Model API key from https://dev.meta.ai; empty = only those features answer 503) and channel OAuth keys (names in the repo-root `.env.example`) |
 
-Then:
+Write them into `deploy/.env` (never print them back), then run the same bootstrap command again: it does the first
+deploy through `deploy/scripts/remote-deploy.sh`, exactly as CI will later, and ends with `deploy: ok (<tier>)`. The
+first start can take 2 to 4 minutes. Do not add `MAILGUN_API_BASE` or `CADDY_*_PORT`: those are for local runs only.
 
-```sh
-cp deploy/env.example deploy/.env && chmod 600 deploy/.env
-```
-
-Edit `deploy/.env`: set every line marked `<-- FILL`. Generate these yourself, each a different
-value, URL-safe: `POSTGRES_PASSWORD`, `APP_DB_PASSWORD`, `TEMPORAL_DB_PASSWORD` with
-`openssl rand -hex 24`, and `JWT_SECRET` with `openssl rand -hex 48`. Set
-`FRONTEND_URL=https://<DOMAIN>` and `NEXT_PUBLIC_BACKEND_URL=https://<DOMAIN>/api`. Leave section 3
-of the file (`NODE_ENV`, `RUN_CRON=true`, limits) as it is. Do not add `MAILGUN_API_BASE` or
-`CADDY_*_PORT`: those are for local runs only.
-
-Also make the paid-features signing key (`ENTITLEMENT_SIGNING_KEY`, `ENTITLEMENT_KEY_ID`): the backend does not
-start in production without it. Generate it once per server; the private key goes straight into `deploy/.env` and is
-never printed. The last command prints the **public** key as `kid=base64`, which the app lists in its
-`ENTITLEMENT_PUBLIC_KEYS` (several keys are comma separated).
-
-```sh
-if grep -q "^ENTITLEMENT_SIGNING_KEY='-----BEGIN" deploy/.env; then echo "key already set, keep it"; else
-  KID=k1                         # any short name; a replacement key later gets a new one (k2, k3)
-  KEY=$(mktemp) && openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$KEY"   # PKCS8 PEM, P-256
-  sed -i '/^ENTITLEMENT_SIGNING_KEY=/d;/^ENTITLEMENT_KEY_ID=/d' deploy/.env
-  # the PEM on one line in single quotes, line breaks written as \n (the backend accepts that form)
-  printf "\nENTITLEMENT_SIGNING_KEY='%s'\nENTITLEMENT_KEY_ID=%s\n" "$(awk 'NF {printf "%s\\n", $0}' "$KEY")" "$KID" >> deploy/.env
-  # the public key as base64 of its DER (SPKI), in the app's kid=base64 format: the only thing to print
-  printf '%s=%s\n' "$KID" "$(openssl pkey -in "$KEY" -pubout -outform DER | openssl base64 -A)"
-  rm -f "$KEY"
-fi
-```
-
-Never run it again on a server that has a key: phones trust only the `kid`s in their list, so a replaced key
-needs a new `kid` and an app release that lists both.
-
-Check DNS before continuing: `getent hosts <DOMAIN>` must print this server's public IP
-(`curl -s https://api.ipify.org`). If not, tell the operator and wait: Caddy cannot get a
-certificate until it does.
-
-## 4. Deploy
-
-```sh
-deploy/scripts/deploy.sh 2gb
-```
-
-It pulls the image, runs migrations (creating the database roles), starts the stack and waits until
-the app answers (first start can take 2 to 4 minutes). It refuses to run while `deploy/.env` still
-has `change-me` or `app.example.com`, and it does not start the app if the pull or a migration fails.
-Success ends with `deploy: ok (2gb)`.
-
-## 5. Check the stack
+## 4. Check the stack
 
 ```sh
 docker ps --format '{{.Names}} {{.Status}}'      # app caddy postgres redis temporal, all Up
@@ -112,9 +69,9 @@ docker exec app pm2 jlist | docker exec -i app node -e 'let s="";process.stdin.o
 ```
 
 `backend`, `orchestrator` and `frontend` must be `online` with `restarts=0`. A restart count that
-keeps rising is a crash loop: show `docker logs --tail 80 app` and use section 8.
+keeps rising is a crash loop: show `docker logs --tail 80 app` and use section 7.
 
-## 6. Acceptance (all must pass)
+## 5. Acceptance (all must pass)
 
 ```sh
 D=<DOMAIN>
@@ -164,7 +121,7 @@ The operator must also add the PayPal webhook: URL `https://<DOMAIN>/api/payment
 webhook id placed in `PAYPAL_WEBHOOK_ID`. After changing `deploy/.env`, run `deploy/scripts/deploy.sh 2gb`
 again.
 
-## 7. Start the 72-hour soak
+## 6. Start the 72-hour soak
 
 ```sh
 tmux new -d -s soak 'deploy/scripts/soak.sh 72 2gb'     # or: nohup deploy/scripts/soak.sh 72 2gb &
@@ -187,30 +144,29 @@ flags count from container creation, so a rerun after a FAIL needs freshly creat
 `docker compose -f deploy/docker-compose.yaml --env-file deploy/tiers/2gb.env --env-file deploy/.env up -d --force-recreate`
 (keeps the volumes).
 
-## 8. If something fails
+## 7. If something fails
 
 | Symptom | Cause and fix |
 |---|---|
 | `deploy: ... still holds a placeholder` | A `change-me` or `app.example.com` is left in `deploy/.env`. Fill it. |
 | `TEMPORAL_DB_USER must not equal a Temporal database name` | Use `temporal_app`, not `temporal`. On an existing database the role was already created under the old name: ask before changing. |
-| `pull access denied` / `unauthorized` | Image is private: `docker login ghcr.io` (section 2), or the tag does not exist: check `APP_IMAGE`. |
+| `pull access denied` / `unauthorized` | Image is private: `echo <token> | docker login ghcr.io -u <github-user> --password-stdin` (a token with `read:packages`), or the tag does not exist: check `APP_IMAGE`. |
 | `migration failed; the app was not started` | Read the lines above it. The database is left as it was before the failing migration. Do not retry in a loop; show the output and stop. |
 | `the app did not answer within 180s` | `docker logs --tail 120 app`. Look for a missing variable or `heap out of memory`. Out of memory on a 2 GB box: check `free -m` and `swapon --show` (swap must be active). |
 | Caddy has no certificate / browser TLS error | DNS does not point here yet, or 80/443 are blocked. `docker logs caddy`. |
 | `Conflict. The container name "/redis" is already in use` | A stopped container of another project has that name. `docker ps -a`, show it to the operator, rename it (`docker rename`) rather than delete it. |
+| `remote-deploy: tracked files were edited on the server` | Someone changed a file under `deploy/` on the server. `git -C /var/www/smm diff` shows it; put the change in the repo, then `git -C /var/www/smm checkout -- .` and push. `deploy/.env` is not tracked and never the cause. |
+| `remote-deploy: ... is not on origin/main` | CI sent a commit that is not on `main` (a rerun of an old branch build). Push to `main`. |
+| `deploy: database backup failed; nothing was changed` | Disk full (`df -h /`) or Postgres not answering (`docker logs postgres`). Free space; old app images go with `docker image prune -f`. |
+| `deploy: no previous build recorded` | `rollback` before a second deploy happened. Deploy a tag by hand: `sh deploy/scripts/deploy.sh <tier> sha-<7 chars>`. |
 | `otp/request` returns 429 | Rate limit per client address (5 codes per 15 min). Wait 15 minutes. |
 
-## 9. Updating later
+## 8. Updating later
 
-```sh
-cd app && git pull
-# optional: pin or roll back by setting APP_IMAGE=...:<tag> in deploy/.env
-deploy/scripts/deploy.sh 2gb
-```
-
-Before the first update that brings the paid features, make the signing key of section 3 on this server: the
-scripts only refuse placeholders, not a missing `ENTITLEMENT_SIGNING_KEY` / `ENTITLEMENT_KEY_ID`, and the app
-does not start in production without them.
-
-Run section 6 again. A move to a bigger server is `deploy/scripts/deploy.sh 4gb` (or `8gb`) with the
-same `deploy/.env`.
+Nothing to do on the server: every push to `main` builds the image and deploys it here (see README, "How a push
+deploys"), and CI fails the run when `https://<DOMAIN>/api/` does not answer 200 afterwards. By hand, in
+`/var/www/smm`: `sh deploy/scripts/deploy.sh <tier> rollback` returns to the previous build;
+`sh deploy/scripts/deploy.sh <tier>` applies a `deploy/.env` change. Run section 5 again after a change you made.
+A move to a bigger server: bootstrap on the new one, then restore the latest `backups/pre-deploy-*.sql.gz` there
+before the first deploy, and copy `deploy/.env` instead of letting bootstrap generate new secrets (the signing key and
+`APP_CREDENTIALS_SECRET` must stay the same).

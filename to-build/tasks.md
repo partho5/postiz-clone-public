@@ -1515,7 +1515,7 @@ Options: a temporary schema file with `shadowDatabaseUrl = env(...)`, or `hidepi
 affects other sites). Decide before coding; migrate-deploy.sh runs on every production deploy.
 
 ## Progress (deploy)
-- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [x] D6 [x] D7 [ ] D8 [ ] D9 [ ] D10 [ ] D11
+- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [x] D6 [x] D7 [x] D8 [ ] D9 [ ] D10 [ ] D11
 - D3/D4/D5/D7 code is in the repo and tested locally with a stand-in docker (pinned build, state file, backup and
   retention, rollback, refused requests, edited-file guard, deploy surviving a dropped SSH connection, exit codes).
   D3b done 2026-11-25 on the server, under the deploy lock: `/var/www/smm` is a sparse checkout (deploy/,
