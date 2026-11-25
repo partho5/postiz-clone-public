@@ -11,6 +11,6 @@ export const metadata: Metadata = {
 };
 
 // Renders the page that ends the session on load.
-export default function LogoutPage() {
+export default function Index() {
   return <LogoutPage />;
 }
