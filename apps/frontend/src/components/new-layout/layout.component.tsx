@@ -103,7 +103,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
           <ContinueProvider />
           <div
             className={clsx(
-              'flex flex-col w-full min-h-screen overflow-x-hidden text-newTextColor p-[8px] sm:p-[12px]',
+              'flex flex-col w-full min-h-screen overflow-x-hidden text-newTextColor p-[2px] sm:p-[12px]',
               jakartaSans.className
             )}
           >

@@ -3,7 +3,7 @@
 // Content plan: one question of a setup round with its options, the recommended ones pre-ticked, and an "Other" box.
 // A question takes one option (a circle) or several (a square); the tick is an icon, the real input stays for keyboards
 // and screen readers.
-import React, { FC } from 'react';
+import React, { FC, useLayoutEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
@@ -52,13 +52,22 @@ export const PlanQuestionCard: FC<{
         : [...value.optionIds, optionId],
     });
   };
-  // Short labels sit two to a row on a wide screen; long ones keep a full row each.
-  const compact = question.options.every((option) => option.label.length <= 36);
   const otherSelected = !!value.other.trim();
+  // "Other" is a box that grows with what is typed, so a long answer stays readable.
+  const otherBox = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const box = otherBox.current;
+    if (box) {
+      box.style.height = 'auto';
+      if (box.scrollHeight) {
+        box.style.height = `${box.scrollHeight}px`;
+      }
+    }
+  }, [value.other]);
   return (
     <fieldset
       disabled={disabled}
-      className="flex flex-col gap-[20px] bg-newBgColorInner rounded-[16px] p-[20px] sm:p-[28px] border border-newTextColor/15 min-w-0"
+      className="flex flex-col gap-[20px] bg-newBgColorInner rounded-[16px] p-[20px] sm:p-[28px] border border-newTextColor/15 min-w-0 max-sm:p-0 max-sm:border-0 max-sm:bg-transparent"
     >
       <legend className="sr-only">{question.text}</legend>
       <div className="flex flex-col gap-[6px]">
@@ -75,19 +84,14 @@ export const PlanQuestionCard: FC<{
           </div>
         )}
       </div>
-      <div
-        className={clsx(
-          'grid grid-cols-1 gap-[14px] sm:gap-[16px]',
-          compact && 'lg:grid-cols-2'
-        )}
-      >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[10px] sm:gap-[16px]">
         {question.options.map((option) => {
           const selected = value.optionIds.includes(option.id);
           return (
             <label
               key={option.id}
               className={clsx(
-                'flex items-center gap-[16px] cursor-pointer rounded-[14px] border-2 px-[20px] py-[16px] min-h-[72px] text-[17px] leading-[1.4] transition duration-150 motion-reduce:transition-none active:scale-[0.99]',
+                'flex items-center gap-[16px] cursor-pointer rounded-[14px] border-2 px-[14px] sm:px-[20px] py-[16px] min-h-[72px] text-[17px] leading-[1.4] transition duration-150 motion-reduce:transition-none active:scale-[0.99]',
                 selected
                   ? 'border-btnPrimary bg-btnPrimary/15 font-[600] shadow-[0_8px_24px_rgba(97,43,211,0.28)]'
                   : 'border-newTextColor/10 bg-newTextColor/[0.04] hover:bg-newTextColor/[0.07] hover:border-btnPrimary/50 hover:-translate-y-px'
@@ -140,8 +144,7 @@ export const PlanQuestionCard: FC<{
         })}
         <label
           className={clsx(
-            'flex items-center gap-[16px] rounded-[14px] border-2 px-[20px] min-h-[72px] text-[17px] transition duration-150 motion-reduce:transition-none focus-within:border-btnPrimary focus-within:shadow-[0_0_0_4px_rgba(97,43,211,0.25)]',
-            compact && 'lg:col-span-2',
+            'flex items-center gap-[16px] rounded-[14px] border-2 px-[14px] sm:px-[20px] min-h-[72px] text-[17px] transition duration-150 motion-reduce:transition-none focus-within:border-btnPrimary focus-within:shadow-[0_0_0_4px_rgba(97,43,211,0.25)]',
             otherSelected
               ? 'border-btnPrimary bg-btnPrimary/15'
               : 'border-newTextColor/10 bg-newTextColor/[0.04] hover:bg-newTextColor/[0.07] hover:border-btnPrimary/50'
@@ -163,7 +166,9 @@ export const PlanQuestionCard: FC<{
             <path d="M12 20h9" />
             <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
           </svg>
-          <input
+          <textarea
+            ref={otherBox}
+            rows={1}
             dir="auto"
             value={value.other}
             maxLength={LIMITS.other}
@@ -176,7 +181,7 @@ export const PlanQuestionCard: FC<{
                 other: event.target.value,
               })
             }
-            className="flex-1 min-w-0 bg-transparent py-[16px] text-[17px] text-newTextColor placeholder:text-newTextColor/50 outline-none"
+            className="flex-1 min-w-0 resize-none overflow-hidden bg-transparent py-[16px] text-[17px] leading-[1.4] text-newTextColor placeholder:text-newTextColor/50 outline-none"
           />
         </label>
       </div>

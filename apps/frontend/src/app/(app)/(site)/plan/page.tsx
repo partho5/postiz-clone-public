@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 // Renders the brand's AI content plan: its setup, its proposal and the running plan.
 export default async function Page() {
   return (
-    <div className="bg-newBgColorInner flex-1 min-w-0 flex-col flex p-[20px] gap-[12px]">
+    <div className="bg-newBgColorInner flex-1 min-w-0 flex-col flex px-[2px] py-[12px] sm:p-[20px] gap-[12px]">
       <ContentPlanComponent />
     </div>
   );
