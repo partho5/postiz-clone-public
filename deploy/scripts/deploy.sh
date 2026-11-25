@@ -40,6 +40,11 @@ if grep -q 'change-me\|app.example.com\|mg.example.com\|noreply@example.com' "$E
 fi
 
 set -- --env-file "$TIER_FILE" --env-file "$ENV_FILE"
+# HOST_NGINX=1 in deploy/.env: the server's own nginx owns 80/443, so Caddy stays off and the app is
+# published on 127.0.0.1:${APP_HOST_PORT:-3000} (see host-nginx.yaml). Placed in "$@" so migrate.sh sees it too.
+if [ "$(env_value HOST_NGINX "$ENV_FILE")" = "1" ]; then
+  set -- -f "$DEPLOY_DIR/host-nginx.yaml" "$@"
+fi
 COMPOSE="docker compose -f $DEPLOY_DIR/docker-compose.yaml"
 
 echo "deploy: pulling images ($TIER)"
@@ -61,4 +66,7 @@ until $COMPOSE "$@" exec -T app node -e \
   [ "$WAITED" -lt "$READY_SECONDS" ] || fail "the app did not answer within ${READY_SECONDS}s; see: docker logs app"
   sleep 5
 done
+# Dangling images only (the previous build lost its tag when :latest moved); volumes are never touched.
+# Each app image is about 7 GB, so without this the disk fills after a few deploys.
+docker image prune -f >/dev/null
 echo "deploy: ok ($TIER)"

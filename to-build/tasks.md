@@ -1414,3 +1414,90 @@ Manual:
 6. [ ] 375 px width: the brand avatar is in the header; tap it; the palette opens and the switch works.
 7. [ ] Ctrl+K toggles the palette; Ctrl+K inside the post editor still makes a link.
 8. [ ] With the network to `/user/change-org` blocked (devtools), the switch still happens.
+
+---
+
+# Deploy: seamless push-to-deploy, reproducible on a new VPS
+
+Goal (owner, 2026-11-25): pushing `main` deploys with no hand work, and a brand-new VPS gets the same setup as the
+current one from the repo, with one script. Today the current VPS works, but part of its setup lives only on the server
+(host nginx in front, `manual-override.yaml`, `manual-up.sh`, the forced-command deploy key), and the deploy files on the
+server never update from the repo.
+
+Gaps found in the repo (2026-11-25):
+- `deploy/docker-compose.yaml` only knows Caddy on 80/443. A VPS shared with other sites (host nginx) is not covered.
+- `deploy.sh` runs the server's own copy of `deploy/`; a compose or script change in the repo never reaches the server.
+- The CI deploy step hard-codes the SSH user and `/var/www/smm`; the forced-command key is set up by hand.
+- The image deployed is `:latest`, so there is no record of the previous build and no one-command rollback.
+- No database backup before a migration (the manual fallback does one by hand).
+- The signing key, secrets, swap, Docker and the deploy key are separate manual steps in DEPLOY_GUIDE.md.
+- CI only checks the app answers inside the container, not through the public domain.
+
+## D1 — Capture the current VPS setup (read-only, needs owner SSH)
+Read and save into this file (no secrets): `manual-override.yaml`, `manual-up.sh`, the nginx site for the domain, the
+`authorized_keys` forced-command line (options only, not the key), whether `/var/www/smm` is a git checkout, the
+`deploy/.env` key names (not values), `docker ps`, crontab entries for the stack.
+**Done when:** every server-only piece is listed here with its content or purpose.
+
+Found 2026-11-25 (server `web01`, Debian 13, 2 GB RAM + 4 GB swap, 30 GB free, shared with other sites):
+- `/var/www/smm` is a plain copy, not a git checkout: `deploy/`, `dynamicconfig/`, `backups/`, `HANDOFF.md`.
+  Compose project `deploy`; volumes `deploy_postgres-data`, `deploy_redis-data`, `deploy_uploads`, `deploy_app-config`.
+- Server-only, not in the repo: `deploy/host-nginx.yaml` (Caddy put in a `disabled` profile, app published on
+  `127.0.0.1:${APP_HOST_PORT:-3000}:5000`); `deploy.sh` additions: adds `-f host-nginx.yaml` when `HOST_NGINX=1` in
+  `deploy/.env` (before migrate, so migrate sees it), and `docker image prune -f` after a deploy (images are ~7 GB).
+  `manual-up.sh` and `manual-override.yaml` are gone (renamed / deleted 2026-11-24).
+- Repo is ahead of the server on `env.example` (META_MUSE relay lines); the server's line 39 rewording is unverified.
+  `soak.sh` was deleted on the server.
+- Host nginx site `/etc/nginx/sites-available/social.nanybot.com`: `proxy_pass http://127.0.0.1:3000`, HTTP/1.1 with
+  Upgrade/Connection (websockets), Host / X-Real-IP / X-Forwarded-For / X-Forwarded-Proto, `client_max_body_size 128M`,
+  `proxy_read_timeout 120s`, own access/error logs; TLS by Certbot (443 + 80 -> 301). The domain is behind Cloudflare,
+  so CI SSHes to the IP (`DEPLOY_HOST`).
+- `authorized_keys`: `command="flock /tmp/smm-deploy.lock sh /var/www/smm/deploy/scripts/deploy.sh 2gb",restrict`
+  for the key `github-actions-deploy`. The private half lives only in the GitHub secret `DEPLOY_SSH_KEY`.
+- `deploy/.env` uses `HOST_NGINX=1` (keep this name, do not rename it to `EDGE`). Backups in `/var/www/smm/backups`
+  were made by hand; no crontab.
+
+## D2 — Edge choice in the repo: Caddy or host nginx
+`HOST_NGINX=1` in `deploy/.env` (the name the current server already uses). The repo gets the server's
+`deploy/host-nginx.yaml` and the `deploy.sh` additions above as they are, plus an nginx site template
+(`deploy/nginx/site.conf`) matching the current site, installed and certified by bootstrap (D6). The current VPS's result must be
+identical to what `manual-override.yaml` gives today.
+**Done when:** `docker compose config` with the override matches the current server's effective config (D1).
+
+## D3 — The server's deploy files follow the repo
+The forced command runs `deploy/scripts/remote-deploy.sh`: it updates the checkout to the pushed commit (fetch, then
+checkout of that sha, deploy files only, never touching `deploy/.env` or volumes), then runs `deploy.sh`.
+**Done when:** a change to `deploy/` in the repo reaches the server on the next push with no hand step.
+
+## D4 — Deploy a pinned build, keep the previous one, one-command rollback
+CI passes the short sha through the SSH command (the forced command reads and validates `SSH_ORIGINAL_COMMAND`).
+`deploy.sh` deploys `:<sha>`, records the previous sha, and `deploy.sh <tier> rollback` returns to it.
+**Done when:** deploy and rollback both work on the server and `docker inspect app` shows the expected sha.
+
+## D5 — Backup before migrating
+`deploy.sh` runs `pg_dump` (compressed, into `deploy/backups/`, last 7 kept) before `migrate.sh`; a failed backup stops
+the deploy.
+**Done when:** a deploy leaves a fresh dump and older ones beyond 7 are gone.
+
+## D6 — One bootstrap script for a new VPS
+`deploy/scripts/bootstrap.sh`: checks OS, installs Docker and swap, clones the repo, writes `deploy/.env` from
+`env.example` with generated secrets and the signing key (asks only for owner-owned values), chooses the edge (D2), creates
+the deploy key with the forced command (D3), prints the private key and host to put in GitHub secrets, runs the first
+deploy. Safe to run again.
+**Done when:** a fresh Ubuntu VM reaches `deploy: ok` with only the owner-owned values typed in.
+
+## D7 — CI deploy job: no hard-coded server details, public check
+SSH user and path come from repository variables (`DEPLOY_USER`, `DEPLOY_PATH`); after the deploy, CI checks
+`https://<DOMAIN>/api/` answers 200 and fails the job otherwise.
+**Done when:** the deploy job passes on the current VPS with the new variables.
+
+## D8 — Docs
+`deploy/README.md` and `DEPLOY_GUIDE.md` rewritten around bootstrap, edge choice, rollback and backups.
+**Done when:** a new VPS can be set up from DEPLOY_GUIDE.md alone.
+
+## D9 — Rehearsal on a fresh machine
+Run bootstrap on a throwaway VM (local VM or a cheap fresh VPS) end to end, then destroy it.
+**Done when:** the rehearsal reaches the acceptance checks of DEPLOY_GUIDE.md section 6.
+
+## Progress (deploy)
+- [x] D1 [x] D2 [ ] D3 [ ] D4 [ ] D5 [ ] D6 [ ] D7 [ ] D8 [ ] D9
