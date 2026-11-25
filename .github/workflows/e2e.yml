@@ -3,9 +3,10 @@
 # app, then runs the Playwright suite in e2e/. A failing test fails the job.
 name: E2E
 
+# Not on push: it rebuilds the whole app and does not gate the deploy.
 on:
-  push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   e2e:

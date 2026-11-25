@@ -1,14 +1,11 @@
 ---
 name: "Code Quality Analysis"
 
+# Weekly instead of on every push to main.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - apps/**
-      - '!apps/docs/**'
-      - libraries/**
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
 
 
 jobs:

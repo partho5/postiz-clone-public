@@ -1,10 +1,10 @@
 ---
 name: Build
 
+# Push builds are covered by build-image.yml (the Docker build compiles the same code).
 on:
-  push:
-  merge_group:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
