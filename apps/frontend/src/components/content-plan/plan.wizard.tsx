@@ -53,7 +53,7 @@ const PlanStepBar: FC<{
               <span
                 aria-hidden="true"
                 className={clsx(
-                  'flex items-center justify-center h-[24px] w-[24px] rounded-full text-[13px]',
+                  'flex items-center justify-center h-[24px] w-[24px] rounded-full ',
                   active || done
                     ? 'bg-btnPrimary text-white'
                     : 'border border-newTextColor/40'
@@ -69,9 +69,7 @@ const PlanStepBar: FC<{
                       strokeLinejoin="round"
                     />
                   </svg>
-                ) : (
-                  index + 1
-                )}
+                ) : null}
               </span>
               <span className={clsx(!active && 'hidden sm:inline')}>
                 {step.label}
