@@ -1527,6 +1527,8 @@ used by `next start`) is 644 MB.
   layer and 15 MB of source; the 3.15 GB dependency layer is reused. Live 2026-11-25: `sha-639c34e` deployed
   (first CI build failed on a Google Fonts download, rerun passed); its deploy took 12 min with the full pull and
   the new migration scripts ran on production ("No pending migrations", "money-roles: API role app_api is ready").
+  Next deploy (`sha-eca86fd`, docs only): image build 22 s, no layer pulled, deploy 4 min instead of 12. A code
+  commit pulls only the build and source layers (~200 MB); not yet timed on the server.
 - [x] D11a Decision: Prisma 6.5 has no non-argument form for the shadow URL (tested: `migrate diff --from-migrations`
   refuses without `--shadow-database-url`), and `hidepid` would change the shared server. So `migrate-deploy.sh`
   replays migrations into the scratch schema itself with `migrate deploy` on a temporary schema file whose URL is
