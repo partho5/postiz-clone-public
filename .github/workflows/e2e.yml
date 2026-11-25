@@ -3,13 +3,23 @@
 # app, then runs the Playwright suite in e2e/. A failing test fails the job.
 name: E2E
 
-# Not on push: it rebuilds the whole app and does not gate the deploy.
+# Starts after Build image succeeds on main, so it never competes with the deploy for runners.
 on:
+  workflow_run:
+    workflows: ['Build image']
+    types: [completed]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+# A newer build of the same branch replaces a run still waiting or running
+concurrency:
+  group: e2e-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -60,6 +70,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The commit Build image built, not whatever main is by now
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Use Node.js 22.12.0
         uses: actions/setup-node@v4

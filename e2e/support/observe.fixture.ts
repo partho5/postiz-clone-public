@@ -154,5 +154,9 @@ export const UNSCOPED = [
   '/oauth',
   '/modal/',
   '/uploads/',
+  '/terms',
+  '/privacy',
+  '/data-deletion',
+  '/logout',
   '/api/',
 ];
