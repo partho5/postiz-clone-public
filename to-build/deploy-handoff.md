@@ -14,7 +14,7 @@ reproducible on a new VPS" (D1-D11). Pipeline and server layout: `deploy/README.
   the deploy job has its own non-cancelling group).
 - E2E: the suite had never passed. Two test bugs fixed in `e2e/`: the unscoped page list missed `/terms`,
   `/privacy`, `/data-deletion`, `/logout` (`support/observe.fixture.ts`), and `two.tabs.spec.ts` clicked the hidden
-  mobile menu link (now `.filter({ visible: true })`). 14 of 15 passed before; the run for `8c43d095` decides the last.
+  mobile menu link (now `.filter({ visible: true })`). Green for the first time on `8c43d095`: 15 of 15 passed.
 - Server (`web01`, `/var/www/smm`): now a sparse git checkout of the public repo (deploy/, dynamicconfig/, .gitignore).
   The CI key's forced command is `sh /var/www/smm/deploy/scripts/remote-deploy.sh 2gb`: it moves the checkout to the
   pushed commit, then runs that commit's `deploy.sh` with the image built from it (`sha-<7>`), detached with a log in
@@ -33,10 +33,9 @@ reproducible on a new VPS" (D1-D11). Pipeline and server layout: `deploy/README.
 
 ## Left to do
 
-1. **Confirm the last E2E test passes** (run after `8c43d095`'s build): `gh run list -R partho5/postiz-clone-public
-   -w e2e.yml -L 3`. If `two.tabs.spec.ts` still fails, read `gh run view <id> --log-failed`. Once E2E is green on
-   `main`, decide whether it gates the deploy (option noted in the server's old `HANDOFF.md`: make `e2e.yml`
-   `workflow_call` and have the deploy job need it; each deploy gets ~10 min slower).
+1. **Decide whether E2E gates the deploy**, now that it is green: make `e2e.yml` `workflow_call` and have the deploy
+   job need it (a failing test then blocks production; each deploy gets about 10 minutes slower), or keep it running
+   after the deploy as now (faster, but a broken build reaches production before the tests flag it).
 2. **D9, rehearsal on a real fresh VPS** (owner provides a throwaway VPS or a local VM): run bootstrap end to end
    with real Docker, fill owner values (sandbox PayPal, a test Mailgun domain or the log provider is refused in
    production, so a real Mailgun key is needed), reach DEPLOY_GUIDE section 5, then destroy it. Container tests
