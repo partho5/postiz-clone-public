@@ -1524,8 +1524,9 @@ used by `next start`) is 644 MB.
 - [x] D10b Remove `apps/frontend/.next/cache` in the build step.
 - [x] D10c Built locally from the tracked files: 4.63 GB -> 3.96 GB uncompressed; the file list equals the current
   image's except `.next/cache` and the build-ID hashed names. A code-only commit now changes the 183 MB build
-  layer and 15 MB of source; the 3.15 GB dependency layer is reused. Pull time to be read from the second deploy
-  after this change (the first one pulls the new dependency layer once).
+  layer and 15 MB of source; the 3.15 GB dependency layer is reused. Live 2026-11-25: `sha-639c34e` deployed
+  (first CI build failed on a Google Fonts download, rerun passed); its deploy took 12 min with the full pull and
+  the new migration scripts ran on production ("No pending migrations", "money-roles: API role app_api is ready").
 - [x] D11a Decision: Prisma 6.5 has no non-argument form for the shadow URL (tested: `migrate diff --from-migrations`
   refuses without `--shadow-database-url`), and `hidepid` would change the shared server. So `migrate-deploy.sh`
   replays migrations into the scratch schema itself with `migrate deploy` on a temporary schema file whose URL is
