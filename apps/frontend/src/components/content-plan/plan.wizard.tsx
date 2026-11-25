@@ -99,7 +99,7 @@ export const PlanWizard: FC<{ plan: PlanView }> = ({ plan }) => {
       ...plan.rounds.map((round, index) => ({
         key: round.id,
         label: t('plan_step_questions', {
-          defaultValue: 'Questions {{number}}',
+          defaultValue: 'Question Set {{number}}',
           number: index + 1,
         }),
       })),
