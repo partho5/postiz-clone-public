@@ -293,6 +293,7 @@ export const BrandSwitcher: FC<{
           ))}
           <div
             role="option"
+            data-testid="brand-new"
             aria-selected={active === brands.length}
             onMouseEnter={() => setActive(brands.length)}
             onClick={createBrand}

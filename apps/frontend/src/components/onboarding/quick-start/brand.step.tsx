@@ -116,7 +116,12 @@ export const BrandStep: FC<{
       />
       {!!error && <div className="text-red-400 text-[12px]">{error}</div>}
       <div className="flex gap-[8px] mt-[8px]">
-        <Button onClick={save} loading={busy} disabled={!name.trim()}>
+        <Button
+          data-testid="quick-start-continue"
+          onClick={save}
+          loading={busy}
+          disabled={!name.trim()}
+        >
           {t('quick_start_continue', 'Continue')}
         </Button>
       </div>

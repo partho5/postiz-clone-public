@@ -38,15 +38,15 @@ test('a new person schedules a first post within two minutes of signing in', asy
     await page.goto('/auth/login');
     await page.locator('input[name="email"]').fill(email);
     const from = logSize();
-    await page.getByRole('button', { name: /send code/i }).click();
+    await page.getByTestId('otp-submit').click();
     await page.locator('input[name="code"]').fill(await mailedCode(email, from));
     await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/quick-start/);
     const workspaceId = page.url().match(/\/w\/([0-9a-f-]{36})\//)![1];
     lap('signed in');
 
     // Brand: the name is prefilled, the colour and time zone are detected
-    await page.getByRole('button', { name: /^continue$/i }).click();
-    await expect(page.getByText(/connect/i).first()).toBeVisible();
+    await page.getByTestId('quick-start-continue').click();
+    await expect(page.getByTestId('quick-start-channel-title')).toBeVisible();
     lap('brand');
 
     // Channel: the connect's result, then the page the person lands back on
@@ -78,7 +78,7 @@ test('a new person schedules a first post within two minutes of signing in', asy
     lap('channel');
 
     // Post: the editor opens on that channel at the next free slot
-    await page.getByRole('button', { name: /write a post/i }).click();
+    await page.getByTestId('quick-start-write-post').click();
     const editor = page.locator('.tiptap, .ProseMirror').first();
     await editor.click();
     await page.keyboard.type(content);

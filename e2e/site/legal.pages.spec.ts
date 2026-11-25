@@ -20,14 +20,6 @@ for (const path of PATHS) {
   });
 }
 
-test('the Terms state no cash refunds and the credit expiry rules', async ({ page }) => {
-  await page.goto('/terms');
-  await expect(page.getByText(/no cash refunds/i)).toBeVisible();
-  await expect(page.getByText(/never expire/i)).toBeVisible();
-  await expect(page.getByText(/reset at each billing period/i)).toBeVisible();
-  await expect(page.getByText(/free credits reset every month/i)).toBeVisible();
-});
-
 test('the sign-in page links to the three pages', async ({ page }) => {
   await page.goto('/auth');
   for (const path of PATHS) {

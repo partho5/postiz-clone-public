@@ -115,6 +115,7 @@ export const NewBrandDialog: FC<{ onClose: () => void }> = ({ onClose }) => {
       />
       <div className="flex gap-[8px] mt-[8px]">
         <Button
+          data-testid="brand-create"
           onClick={create}
           loading={busy}
           disabled={!name.trim() || !cost.data}

@@ -360,6 +360,7 @@ export const DecisionModal: FC<{
       <div className="max-w-[600px] break-words">{description}</div>
       <div className="flex flex-col-reverse sm:flex-row gap-[12px] mt-[16px]">
         <Button
+          data-testid="confirm-approve"
           onClick={() => {
             resolution(true);
             closeCurrent();

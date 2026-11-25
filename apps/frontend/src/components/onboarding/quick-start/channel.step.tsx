@@ -20,7 +20,7 @@ export const ChannelStep: FC = () => {
 
   return (
     <div className="flex flex-col gap-[8px]">
-      <h2 className="text-[18px]">
+      <h2 className="text-[18px]" data-testid="quick-start-channel-title">
         {t('quick_start_channel_title', 'Connect a channel')}
       </h2>
       <div className="text-textItemBlur text-[14px]">

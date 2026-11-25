@@ -107,8 +107,8 @@ test('A tab that missed the broadcast is refused with 409 and reloads instead of
   // A acts on A's screen: delete A's post
   const reloaded = reloadToRoot(tabA);
   await tabA.getByText(a.workspace.post).first().hover();
-  await tabA.locator('svg[data-tooltip-content="Delete Post"]').first().click();
-  await tabA.getByRole('button', { name: /Yes, delete it/i }).click();
+  await tabA.getByTestId('delete-post').first().click();
+  await tabA.getByTestId('confirm-approve').click();
   await reloaded;
 
   expect(answersToA.map((answer) => answer.method)).toContain('DELETE');

@@ -40,7 +40,7 @@ export const LogoutComponent: FC<{ isIcon?: boolean }> = ({ isIcon }) => {
   }, []);
   return (
     <>
-      <div className="cursor-pointer" onClick={logout}>
+      <div className="cursor-pointer" data-testid="logout" onClick={logout}>
         {isIcon ? (
           <svg
             width="24"

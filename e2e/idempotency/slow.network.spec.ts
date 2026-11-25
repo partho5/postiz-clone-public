@@ -84,7 +84,7 @@ test.describe('a retried mutation on Slow 3G with a dropped response', () => {
 
     const cdp = await page.context().newCDPSession(page);
     await page.keyboard.press('Control+K');
-    await page.getByRole('option', { name: /new brand/i }).click();
+    await page.getByTestId('brand-new').click();
     const brand = uniqueMarker('brand');
     await page.locator('input[name="newBrandName"]').fill(brand);
 
@@ -92,7 +92,7 @@ test.describe('a retried mutation on Slow 3G with a dropped response', () => {
     await throttle(cdp, true);
 
     // The first answer is lost: the dialog stays and the person presses Create again
-    const create = page.getByRole('button', { name: /create brand/i });
+    const create = page.getByTestId('brand-create');
     await create.click();
     await expect.poll(() => dropped.dropped, { timeout: 120_000 }).toBe(1);
     const replay = page.waitForResponse(

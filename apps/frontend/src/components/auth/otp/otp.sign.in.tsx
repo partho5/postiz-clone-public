@@ -182,6 +182,7 @@ const OtpForm: FC<{ providerReturn: ProviderReturn }> = ({
       <div className="w-full flex mt-[12px]">
         <Button
           type="submit"
+          data-testid="otp-submit"
           className="flex-1 rounded-[10px] !h-[52px]"
           loading={otp.loading}
           disabled={waiting}

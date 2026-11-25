@@ -87,9 +87,10 @@ export const logOut = async (page: Page) => {
   const { pathname } = new URL(page.url());
   await page.goto(pathname.replace(/^(\/w\/[^/]+)\/.*$/, '$1/settings'));
   await page
-    .getByText(/Logout from/)
+    .getByTestId('logout')
+    .filter({ visible: true })
     .first()
     .click();
-  await page.getByRole('button', { name: /Yes logout/i }).click();
+  await page.getByTestId('confirm-approve').click();
   await expect(page).toHaveURL(/\/auth/);
 };

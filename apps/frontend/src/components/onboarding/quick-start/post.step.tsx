@@ -61,7 +61,7 @@ export const PostStep: FC<{
         )}
       </div>
       <div className="flex gap-[8px] mt-[8px]">
-        <Button onClick={openEditor}>
+        <Button data-testid="quick-start-write-post" onClick={openEditor}>
           {t('quick_start_write_post', 'Write a post')}
         </Button>
       </div>
