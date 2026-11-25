@@ -7,8 +7,9 @@ reproducible on a new VPS" (D1-D11). Pipeline and server layout: `deploy/README.
 
 ## Done and verified
 
-- CI runs per push: Build image (build, then deploy) and Stale references. E2E and CodeQL start via `workflow_run`
-  after Build image succeeds on `main` (`e2e.yml` checks out the built commit, `workflow_run.head_sha`). Build
+- CI runs per push: Build image and Stale references. Build image runs `build` and `e2e` (e2e.yml, called as a
+  reusable workflow) side by side, and `deploy` needs both: a failing E2E blocks the deploy (owner decision,
+  2026-11-25). CodeQL starts via `workflow_run` after Build image succeeds on `main`. Build
   (`build.yml`) runs on pull requests and by hand only; it repeated the Docker build's compile.
 - A newer push cancels only a build still running, never a deploy (`build-image.yml`: concurrency on the build job;
   the deploy job has its own non-cancelling group).
@@ -28,27 +29,22 @@ reproducible on a new VPS" (D1-D11). Pipeline and server layout: `deploy/README.
 - `deploy/scripts/bootstrap.sh`: new VPS in one command (Docker, swap, user, checkout, `.env` with generated
   secrets and signing key, host nginx site + certbot or Caddy, CI deploy key with forced command, first deploy once
   owner values are filled). Tested twice in a clean Debian 13 container with docker/systemctl stubbed, both edges.
-- Docs rewritten (README, DEPLOY_GUIDE). `gh` CLI is installed in `~/.local/bin` and signed in (keyring; the sandbox
+- Docs rewritten (README, DEPLOY_GUIDE; section 9 of the guide is the GitHub side: secrets, variables, what runs,
+  reading a failed run, signing `gh` in). The server's stale `HANDOFF.md` (zip upload, `manual-up.sh`) was deleted. `gh` CLI is installed in `~/.local/bin` and signed in (keyring; the sandbox
   cannot see it, run gh with the sandbox off). `shellcheck` is in `~/.local/bin`.
 
 ## Left to do
 
-1. **Decide whether E2E gates the deploy**, now that it is green: make `e2e.yml` `workflow_call` and have the deploy
-   job need it (a failing test then blocks production; each deploy gets about 10 minutes slower), or keep it running
-   after the deploy as now (faster, but a broken build reaches production before the tests flag it).
-2. **D9, rehearsal on a real fresh VPS** (owner provides a throwaway VPS or a local VM): run bootstrap end to end
+1. **D9, rehearsal on a real fresh VPS** (owner provides a throwaway VPS or a local VM): run bootstrap end to end
    with real Docker, fill owner values (sandbox PayPal, a test Mailgun domain or the log provider is refused in
    production, so a real Mailgun key is needed), reach DEPLOY_GUIDE section 5, then destroy it. Container tests
    cannot cover the real Docker install, certbot or Caddy certificates.
-3. **D10, image size**: the app image is about 7.4 GB; pulling it is most of a deploy (about 7 minutes on the 2 GB
+2. **D10, image size**: the app image is about 7.4 GB; pulling it is most of a deploy (about 7 minutes on the 2 GB
    server, and the server has ~30 GB free). Measure layers (`docker history`), slim `Dockerfile.dev` (dev
    dependencies, build caches, pnpm store) without changing what runs.
-4. **D11, database password visible in `ps`** during a migration: `money-roles.sh` and `migrate-deploy.sh` pass the
+3. **D11, database password visible in `ps`** during a migration: `money-roles.sh` and `migrate-deploy.sh` pass the
    URL as a Prisma argument. Design note in tasks.md D11 (the shadow database URL has no environment form). Decide
    the approach before coding; these scripts run on every production deploy.
-5. Small: the server's untracked `/var/www/smm/HANDOFF.md` (2026-11-24) is out of date; replace it with a pointer to
-   this file or delete it. The memory note `public-repo-and-vps-deploy` still describes `manual-up.sh` and says not to
-   use `deploy.sh` on the server; both are outdated (the server now runs `remote-deploy.sh` -> `deploy.sh`).
 
 ## Rules that matter here
 

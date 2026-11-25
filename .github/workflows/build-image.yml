@@ -54,8 +54,13 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           
+  # The e2e suite (e2e.yml) runs beside the image build; it builds the app from source, so it does not wait for the image.
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+
+  # Only when both the image build and the e2e suite passed: a failing test never reaches production.
   deploy:
-    needs: build
+    needs: [build, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:

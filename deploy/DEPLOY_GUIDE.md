@@ -163,10 +163,67 @@ flags count from container creation, so a rerun after a FAIL needs freshly creat
 
 ## 8. Updating later
 
-Nothing to do on the server: every push to `main` builds the image and deploys it here (see README, "How a push
-deploys"), and CI fails the run when `https://<DOMAIN>/api/` does not answer 200 afterwards. By hand, in
+Nothing to do on the server: every push to `main` builds the image, runs the e2e suite and, when both pass, deploys
+it here (see README, "How a push deploys"), and CI fails the run when `https://<DOMAIN>/api/` does not answer 200 afterwards. By hand, in
 `/var/www/smm`: `sh deploy/scripts/deploy.sh <tier> rollback` returns to the previous build;
 `sh deploy/scripts/deploy.sh <tier>` applies a `deploy/.env` change. Run section 5 again after a change you made.
 A move to a bigger server: bootstrap on the new one, then restore the latest `backups/pre-deploy-*.sql.gz` there
 before the first deploy, and copy `deploy/.env` instead of letting bootstrap generate new secrets (the signing key and
 `APP_CREDENTIALS_SECRET` must stay the same).
+
+## 9. The GitHub side
+
+### Secrets and variables (once per server)
+
+Repository on github.com > **Settings** > **Secrets and variables** > **Actions**.
+
+| Tab | Name | Value |
+|---|---|---|
+| Secrets | `DEPLOY_SSH_KEY` | the private key bootstrap printed, every line from `-----BEGIN` to `-----END` |
+| Secrets | `DEPLOY_HOST` | the server's public IP (behind Cloudflare the domain does not pass SSH) |
+| Variables | `DEPLOY_USER` | the deploy user (bootstrap's `--user`) |
+| Variables | `DEPLOY_URL` | `https://<DOMAIN>`, no trailing slash; CI checks `<DEPLOY_URL>/api/` answers 200 |
+
+With the `gh` CLI signed in, the variables can be set from a terminal instead:
+`gh variable set DEPLOY_USER -R <owner>/<repo> --body <user>` (and the same for `DEPLOY_URL`).
+
+### What runs on a push to `main`
+
+| Workflow | When | Blocks the deploy? |
+|---|---|---|
+| Build image (`build-image.yml`) | every push to `main` and `v*` tags | it is the deploy: jobs `build` and `e2e` side by side, then `deploy` |
+| E2E (`e2e.yml`) | called by Build image; also on pull requests and by hand | yes: a failed test means no deploy |
+| Stale references | every push and pull request, about 12 seconds | no |
+| Code Quality Analysis (CodeQL) | after Build image succeeds on `main`, or by hand | no |
+| Build (`build.yml`) | pull requests and by hand only (a push is already compiled by the image build) | no |
+
+A deploy that did not happen because E2E failed shows as a skipped `deploy` job in the Build image run; the site keeps
+running the previous build. Fix the test or the code and push again.
+
+### Reading a failed run
+
+On github.com: **Actions** > the workflow (for example **Build image**) > the newest run > the red job > expand the red
+step. The E2E job also keeps its Playwright report, traces and app logs for 7 days as the artifact `e2e-report`
+(bottom of the run page).
+
+From a terminal, with the `gh` CLI:
+
+```sh
+gh run list -R <owner>/<repo> -L 5                         # recent runs and their results
+gh run view <run id> -R <owner>/<repo> --log-failed        # only the failing steps' log
+gh run download <run id> -R <owner>/<repo> -n e2e-report   # the Playwright report and the app logs
+```
+
+Without signing in, GitHub shows run results but not their logs (the API answers 403), so sign `gh` in once on the
+machine you use:
+
+1. Install it: on Debian or Ubuntu `sudo apt install gh`, or download the `linux_amd64` archive from
+   https://github.com/cli/cli/releases and put `bin/gh` in `~/.local/bin`.
+2. In a normal terminal (not a command run from inside an AI assistant, whose sandbox throws away what it saves):
+   `gh auth login`, then choose **GitHub.com**, **HTTPS**, **Login with a web browser**.
+3. Copy the one-time code it prints, press Enter, paste the code on https://github.com/login/device and approve.
+   When GitHub asks you to confirm access ("sudo mode"), use **More options** if needed and enter your GitHub
+   password or an authenticator code; "Sudo authentication failed" means that confirmation was wrong, so start again
+   from step 2 (codes expire after 15 minutes).
+4. Wait until the terminal itself prints `✓ Logged in as <user>`, then check with `gh auth status`.
+

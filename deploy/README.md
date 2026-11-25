@@ -30,14 +30,17 @@ not a domain behind a proxy), variables `DEPLOY_USER` and `DEPLOY_URL` (`https:/
 
 ## How a push deploys
 
-A push to `main` runs [build-image.yml](../.github/workflows/build-image.yml): the build publishes
-`ghcr.io/<owner>/<repo>:sha-<7 chars>` (and `latest`), then the deploy job SSHes to the server with
-`deploy <commit sha>`. The key's forced command ([scripts/remote-deploy.sh](scripts/remote-deploy.sh)) moves the
+A push to `main` runs [build-image.yml](../.github/workflows/build-image.yml). Two jobs run side by side: the
+build publishes `ghcr.io/<owner>/<repo>:sha-<7 chars>` (and `latest`), and the e2e suite
+([e2e.yml](../.github/workflows/e2e.yml)) tests the same commit. Only when both pass does the deploy job SSH to the
+server with `deploy <commit sha>`: a failing test keeps that build out of production (the site keeps running the
+previous one). The key's forced command ([scripts/remote-deploy.sh](scripts/remote-deploy.sh)) moves the
 server's checkout to that commit, so the deploy files always match the repo, then runs that commit's
 [scripts/deploy.sh](scripts/deploy.sh): pull the image, dump the database into `backups/`, migrate, start, wait until
 the app answers. CI then checks `DEPLOY_URL/api/` answers 200. One deploy runs at a time; a newer push replaces a
 build still running but never stops a deploy that has started, and a dropped connection does not stop it either
-(its log is in `/var/www/smm/logs/`). E2E and CodeQL start after the image build succeeds.
+(its log is in `/var/www/smm/logs/`). CodeQL runs after a successful Build image. The GitHub side (secrets,
+variables, reading a failed run) is in [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md), section 9.
 
 A tracked file edited on the server stops the next deploy (`git -C /var/www/smm status`): change it in the repo.
 `deploy/.env`, `backups/`, `logs/` and the volumes are not tracked and never touched by a deploy.
