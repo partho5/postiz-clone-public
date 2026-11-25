@@ -26,7 +26,7 @@ export const ContentPlanComponent: FC = () => {
   }
 
   return (
-    <div className="flex flex-col gap-[16px] max-w-[860px]">
+    <div className="flex flex-col gap-[16px] max-w-[1200px]">
       <div className="text-[24px] font-[600]">
         {t('plan_page_title', 'Content plan')}
       </div>
