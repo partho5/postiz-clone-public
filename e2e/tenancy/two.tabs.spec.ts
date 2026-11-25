@@ -40,9 +40,14 @@ const expectOnlyOwn = async (tab: Tab) => {
   expect(unprefixed).toEqual([]);
 };
 
-// Follows the tab's menu link to another page of its workspace
+// Follows the tab's menu link to another page of its workspace; the visible one, since the
+// mobile bottom bar holds the same links, hidden at desktop width
 const followMenu = async (tab: Tab, page: string) => {
-  await tab.page.locator(`a[href="/w/${tab.own.id}${page}"]`).first().click();
+  await tab.page
+    .locator(`a[href="/w/${tab.own.id}${page}"]`)
+    .filter({ visible: true })
+    .first()
+    .click();
   await expect(tab.page).toHaveURL(new RegExp(`/w/${tab.own.id}${page}`));
 };
 
