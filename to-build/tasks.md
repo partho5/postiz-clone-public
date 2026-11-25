@@ -1514,8 +1514,32 @@ from/to sides can move to `--schema` / `--*-schema-datasource` with the URL in t
 Options: a temporary schema file with `shadowDatabaseUrl = env(...)`, or `hidepid` on the host's /proc (server-wide,
 affects other sites). Decide before coding; migrate-deploy.sh runs on every production deploy.
 
+## Plan D10 + D11 (2026-11-25)
+Measured: the pull is 1.67 GB compressed (dependency layer 874 MB, build layer 577 MB); `COPY . /app` comes before
+`pnpm install`, so every commit rebuilds and re-pulls the dependency layer. Inside: `.next/cache` (build cache, not
+used by `next start`) is 644 MB.
+- [x] D10a `Dockerfile.dev`: copy only the manifests, lockfile, Prisma schema and the frontend postinstall script
+  before `pnpm install`; copy the source after it. The dependency layer is reused (and stays on the server) until
+  dependencies change.
+- [x] D10b Remove `apps/frontend/.next/cache` in the build step.
+- [x] D10c Built locally from the tracked files: 4.63 GB -> 3.96 GB uncompressed; the file list equals the current
+  image's except `.next/cache` and the build-ID hashed names. A code-only commit now changes the 183 MB build
+  layer and 15 MB of source; the 3.15 GB dependency layer is reused. Pull time to be read from the second deploy
+  after this change (the first one pulls the new dependency layer once).
+- [x] D11a Decision: Prisma 6.5 has no non-argument form for the shadow URL (tested: `migrate diff --from-migrations`
+  refuses without `--shadow-database-url`), and `hidepid` would change the shared server. So `migrate-deploy.sh`
+  replays migrations into the scratch schema itself with `migrate deploy` on a temporary schema file whose URL is
+  `env(...)`, and every other `--url`/`--from-url`/`--to-url` becomes a `--schema`/`--*-schema-datasource` file
+  with the URL in the environment.
+- [x] D11b `money-roles.sh`: `db execute --schema` with a temporary datasource file, URL in the environment.
+- [x] D11c `migrate-deploy.spec.ts` and the money scope spec pass (30 of 30) against a throwaway Postgres. `ps`
+  sampled every 0.2 s through a full migrate + roles run: our scripts pass no URL any more, but Prisma 6.5 itself
+  starts its schema engine as `schema-engine cli --datasource <url> can-connect-to-database` (a ~0.1 s check inside
+  `migrate deploy/status/resolve`, hard-coded in the CLI; the engine reads no PGPASSWORD or passfile, tested). One
+  sample of 73 caught it. Left: closing that needs a newer Prisma or `hidepid` on the host (server-wide, owner).
+
 ## Progress (deploy)
-- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [x] D6 [x] D7 [x] D8 [ ] D9 [ ] D10 [ ] D11
+- [x] D1 [x] D2 [x] D3 [x] D4 [x] D5 [x] D6 [x] D7 [x] D8 [ ] D9 [x] D10 [~] D11 (Prisma's own 0.1 s engine check remains)
 - D3/D4/D5/D7 code is in the repo and tested locally with a stand-in docker (pinned build, state file, backup and
   retention, rollback, refused requests, edited-file guard, deploy surviving a dropped SSH connection, exit codes).
   D3b done 2026-11-25 on the server, under the deploy lock: `/var/www/smm` is a sparse checkout (deploy/,

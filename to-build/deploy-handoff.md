@@ -39,12 +39,16 @@ reproducible on a new VPS" (D1-D11). Pipeline and server layout: `deploy/README.
    with real Docker, fill owner values (sandbox PayPal, a test Mailgun domain or the log provider is refused in
    production, so a real Mailgun key is needed), reach DEPLOY_GUIDE section 5, then destroy it. Container tests
    cannot cover the real Docker install, certbot or Caddy certificates.
-2. **D10, image size**: the app image is about 7.4 GB; pulling it is most of a deploy (about 7 minutes on the 2 GB
-   server, and the server has ~30 GB free). Measure layers (`docker history`), slim `Dockerfile.dev` (dev
-   dependencies, build caches, pnpm store) without changing what runs.
-3. **D11, database password visible in `ps`** during a migration: `money-roles.sh` and `migrate-deploy.sh` pass the
-   URL as a Prisma argument. Design note in tasks.md D11 (the shadow database URL has no environment form). Decide
-   the approach before coding; these scripts run on every production deploy.
+2. **D11 remainder**: our scripts no longer pass a database URL as an argument (D11 done in the repo, tasks.md "Plan
+   D10 + D11"), but Prisma 6.5 itself runs `schema-engine cli --datasource <url> can-connect-to-database` for
+   ~0.1 s inside `migrate deploy/status/resolve`. Closing it needs a newer Prisma (separate, larger change) or
+   `hidepid=2` on the host's /proc (server-wide; affects the other sites). Owner's call.
+
+## D10 (done 2026-11-25)
+`Dockerfile.dev` installs dependencies from only the manifests, lockfile, Prisma schema and fetch-gtm.mjs, then copies
+the source and builds, and drops `.next/cache`. A code-only commit now changes about 200 MB of layers instead of the
+whole 3.15 GB dependency layer, so the server pulls only that. Verified on a local build: same file list as before
+minus the build cache; 4.63 GB -> 3.96 GB.
 
 ## Rules that matter here
 

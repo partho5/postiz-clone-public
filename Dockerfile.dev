@@ -19,10 +19,27 @@ RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1 pm2
 
 WORKDIR /app
 
+# Dependencies first, from only what `pnpm install` reads (its postinstall scripts need the Prisma schema and the
+# frontend's fetch-gtm.mjs). This layer is rebuilt, and pulled again by the server, only when one of these changes,
+# not on every commit.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc /app/
+COPY apps/backend/package.json /app/apps/backend/
+COPY apps/commands/package.json /app/apps/commands/
+COPY apps/extension/package.json /app/apps/extension/
+COPY apps/frontend/package.json /app/apps/frontend/
+COPY apps/frontend/scripts/fetch-gtm.mjs /app/apps/frontend/scripts/
+COPY apps/orchestrator/package.json /app/apps/orchestrator/
+COPY apps/sdk/package.json /app/apps/sdk/
+COPY libraries/nestjs-libraries/src/database/prisma/schema.prisma /app/libraries/nestjs-libraries/src/database/prisma/
+RUN pnpm install
+
 COPY . /app
 COPY var/docker/nginx.conf /etc/nginx/nginx.conf
 
-RUN pnpm install
-RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+# fetch-gtm.mjs runs again now that a build context's .env (if any) is in place, as the install did before this split.
+# .next/cache is the build's own cache; `next start` does not read it.
+RUN node apps/frontend/scripts/fetch-gtm.mjs \
+ && NODE_OPTIONS="--max-old-space-size=4096" pnpm run build \
+ && rm -rf apps/frontend/.next/cache
 
 CMD ["sh", "-c", "nginx && pnpm run pm2"]

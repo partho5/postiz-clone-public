@@ -4,13 +4,21 @@
 # that later migrations add are granted too. The API role never bypasses row-level security.
 # Runs as the worker role (DATABASE_WORKER_URL), which must bypass it. Called by
 # deploy/scripts/migrate.sh after the migrations; locally: sh <this file> with the same env.
+# The connection string reaches Prisma through the environment (a datasource file), never as an
+# argument, so the password does not show in `ps` on the server.
 set -eu
 
 : "${DATABASE_WORKER_URL:?DATABASE_WORKER_URL is required}"
+export DATABASE_WORKER_URL
 : "${APP_DB_USER:?APP_DB_USER is required}"
 : "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
 
 PRISMA="pnpm dlx prisma@6.5.0"
+DATASOURCE="$(mktemp -d)"
+trap 'rm -rf "$DATASOURCE"' EXIT
+trap 'exit 130' INT TERM
+printf 'datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_WORKER_URL")\n}\n' \
+  >"$DATASOURCE/schema.prisma"
 
 # Prints a value as an SQL string literal.
 literal() {
@@ -24,7 +32,7 @@ identifier() {
 
 # Runs SQL from stdin as the worker role.
 execute() {
-  $PRISMA db execute --url "$DATABASE_WORKER_URL" --stdin
+  $PRISMA db execute --schema "$DATASOURCE/schema.prisma" --stdin
 }
 
 # Creates the role if missing and grants it; the password is not part of this statement, so a
