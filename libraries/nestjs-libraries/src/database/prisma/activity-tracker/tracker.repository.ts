@@ -176,12 +176,13 @@ export class TrackerRepository {
   }
 
   // One row per feature and device from `since` on, so the rows of one feature are the devices that used it.
-  // Capped at 5000 rows and not ordered: past that, the device counts are approximate.
+  // Capped at 5000 rows, the most used first (Prisma needs an orderBy with take): past that, the device counts are approximate.
   async featureDevices(since: Date) {
     return this._activity.model.trackerActivity.groupBy({
       by: ['name', 'description', 'deviceId'],
       where: this.featureWhere(since),
       _count: { _all: true },
+      orderBy: { _count: { id: 'desc' } },
       take: 5000,
     });
   }
@@ -225,12 +226,13 @@ export class TrackerRepository {
     });
   }
 
-  // One row per error group and device from `since` on. Capped at 5000 rows and not ordered, like featureDevices.
+  // One row per error group and device from `since` on. Capped at 5000 rows, the most frequent first, like featureDevices.
   async errorDevices(since: Date) {
     return this._activity.model.trackerActivity.groupBy({
       by: ['errorType', 'screen', 'deviceId'],
       where: { kind: 'error', startedAt: { gte: since } },
       _count: { _all: true },
+      orderBy: { _count: { id: 'desc' } },
       take: 5000,
     });
   }
