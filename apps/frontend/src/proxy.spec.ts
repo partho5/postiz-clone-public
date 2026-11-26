@@ -225,6 +225,17 @@ describe('logout: the way out for a browser stuck with a bad session', () => {
     expect(sentTo(response)!.pathname).toBe('/auth/login');
     expect(response.headers.get('set-cookie')).toContain('auth=;');
   });
+
+  it('/auth/logout also clears an auth cookie scoped to this host only, which the shared-domain clear misses', async () => {
+    process.env.FRONTEND_URL = PUBLIC_URL;
+    const cleared = (await visit('/auth/logout', true)).headers
+      .getSetCookie()
+      .filter((cookie) => cookie.startsWith('auth=;'));
+
+    expect(cleared).toHaveLength(2);
+    expect(cleared.some((cookie) => /domain=\.example\.com/i.test(cookie))).toBe(true);
+    expect(cleared.some((cookie) => !/domain=/i.test(cookie))).toBe(true);
+  });
 });
 
 describe('logout: GET and POST both work', () => {

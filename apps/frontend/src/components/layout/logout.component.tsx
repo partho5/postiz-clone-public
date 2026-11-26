@@ -3,8 +3,7 @@
 import React, { FC, useCallback } from 'react';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { setCookie } from '@gitroom/frontend/components/layout/layout.context';
+import { clearPageSessionCookies } from '@gitroom/frontend/components/layout/layout.context';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
   broadcastAuth,
@@ -13,7 +12,6 @@ import {
 // The logout control: confirms, ends the session on the server, wipes the tab's data and goes to the start page.
 export const LogoutComponent: FC<{ isIcon?: boolean }> = ({ isIcon }) => {
   const fetch = useFetch();
-  const { isSecured } = useVariables();
   const t = useT();
 
   const logout = useCallback(async () => {
@@ -29,9 +27,7 @@ export const LogoutComponent: FC<{ isIcon?: boolean }> = ({ isIcon }) => {
       await fetch('/user/logout', {
         method: 'POST',
       });
-      if (!isSecured) {
-        setCookie('auth', '', -10);
-      }
+      clearPageSessionCookies();
       await wipeSessionData();
       broadcastAuth({ type: 'logout' });
       // eslint-disable-next-line no-restricted-syntax -- bare / exit: logout

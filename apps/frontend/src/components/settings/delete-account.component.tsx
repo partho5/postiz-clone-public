@@ -5,8 +5,7 @@ import React, { FC, useCallback, useState } from 'react';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { Button } from '@gitroom/react/form/button';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { setCookie } from '@gitroom/frontend/components/layout/layout.context';
+import { clearPageSessionCookies } from '@gitroom/frontend/components/layout/layout.context';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { TrashIcon } from '@gitroom/frontend/components/ui/icons';
@@ -16,7 +15,6 @@ const DeleteAccountComponent: FC<{ isLink?: boolean }> = ({ isLink }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
-  const { isSecured } = useVariables();
   const [loading, setLoading] = useState(false);
 
   const deleteAccount = useCallback(async () => {
@@ -50,15 +48,13 @@ const DeleteAccountComponent: FC<{ isLink?: boolean }> = ({ isLink }) => {
         return;
       }
 
-      if (!isSecured) {
-        setCookie('auth', '', -10);
-      }
+      clearPageSessionCookies();
       // eslint-disable-next-line no-restricted-syntax -- bare / exit: account deletion
       window.location.href = '/';
     } finally {
       setLoading(false);
     }
-  }, [isSecured]);
+  }, []);
 
   const loadingOverlay = loading && (
     <div className="text-textColor fixed start-0 top-0 bg-primary/80 z-[500] w-full h-full animate-fade flex flex-col items-center justify-center gap-[24px]">

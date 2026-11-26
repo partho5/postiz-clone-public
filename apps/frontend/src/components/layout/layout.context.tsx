@@ -33,6 +33,14 @@ export function setCookie(cname: string, cvalue: string, exdays: number) {
   const expires = 'expires=' + d.toUTCString();
   document.cookie = cname + '=' + cvalue + ';' + expires + ';path=/';
 }
+// Expires the session cookies the page itself can see. Run on every sign-out, over https too: a copy
+// written while the site ran without TLS outlives the server's clear (it is scoped to this host only),
+// keeps the proxy treating the browser as signed in and loops it back to the app.
+export function clearPageSessionCookies() {
+  setCookie('auth', '', -10);
+  setCookie('showorg', '', -10);
+  setCookie('impersonate', '', -10);
+}
 // Wraps the app's requests with the session handling: cookies from response headers, reload on a changed session, sign-out when the session is lost.
 function LayoutContextInner(params: { children: ReactNode }) {
   const returnUrl = useReturnUrl();
@@ -82,10 +90,10 @@ function LayoutContextInner(params: { children: ReactNode }) {
         await wipeSessionData();
         broadcastAuth({ type: 'logout' });
       }
+      if (logout) {
+        clearPageSessionCookies();
+      }
       if (logout && !isSecured) {
-        setCookie('auth', '', -10);
-        setCookie('showorg', '', -10);
-        setCookie('impersonate', '', -10);
         // eslint-disable-next-line no-restricted-syntax -- bare / exit: logout
         window.location.href = '/';
         return true;
@@ -117,11 +125,7 @@ function LayoutContextInner(params: { children: ReactNode }) {
         (response.status === 403 && url === '/user/self') ||
         response?.headers?.get('logout')
       ) {
-        if (!isSecured) {
-          setCookie('auth', '', -10);
-          setCookie('showorg', '', -10);
-          setCookie('impersonate', '', -10);
-        }
+        clearPageSessionCookies();
         // The auth cookie is httpOnly, so the page cannot clear it and '/' would be sent straight back to
         // /launches by the proxy (which only checks the cookie exists): loop. The proxy's logout clears it.
         window.location.href = '/auth/logout';
@@ -173,14 +177,10 @@ function LayoutContextInner(params: { children: ReactNode }) {
   const onSessionLost = useCallback(async () => {
     await wipeSessionData();
     broadcastAuth({ type: 'logout' });
-    if (!isSecured) {
-      setCookie('auth', '', -10);
-      setCookie('showorg', '', -10);
-      setCookie('impersonate', '', -10);
-    }
+    clearPageSessionCookies();
     // Same as a 401: only the proxy's logout can clear the httpOnly auth cookie, '/' would loop
     window.location.href = '/auth/logout';
-  }, [isSecured]);
+  }, []);
   return (
     <FetchWrapperComponent
       baseUrl={backendUrl}

@@ -137,6 +137,15 @@ export async function proxy(request: NextRequest) {
       maxAge: -1,
       domain: getCookieUrlFromDomain(process.env.FRONTEND_URL!),
     });
+    // A second auth cookie scoped to this host only (written while the site ran without TLS) is not the
+    // one above, so it would survive, keep the browser "signed in" here and loop it back to the app.
+    // Appended after cookies.set, which would otherwise rewrite the Set-Cookie headers by name.
+    response.headers.append(
+      'Set-Cookie',
+      `auth=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${
+        !process.env.NOT_SECURED ? '; Secure; HttpOnly' : ''
+      }`
+    );
     return response;
   }
 

@@ -89,9 +89,11 @@ export const customFetch = (
         : undefined;
 
     // Sends the request with the cookies as they are now, so a retry carries the refreshed token.
+    // Over https the session cookies are httpOnly and travel by themselves; one the page can read is a
+    // leftover from a run without TLS, and sent as a header it would override the real session.
     const send = () => {
       const authNonSecuredCookie =
-        typeof document === 'undefined'
+        typeof document === 'undefined' || secured
           ? null
           : document.cookie
               .split(';')
@@ -99,7 +101,7 @@ export const customFetch = (
               ?.split('=')[1];
 
       const authNonSecuredOrg =
-        typeof document === 'undefined'
+        typeof document === 'undefined' || secured
           ? null
           : document.cookie
               .split(';')
@@ -107,7 +109,7 @@ export const customFetch = (
               ?.split('=')[1];
 
       const authNonSecuredImpersonate =
-        typeof document === 'undefined'
+        typeof document === 'undefined' || secured
           ? null
           : document.cookie
               .split(';')

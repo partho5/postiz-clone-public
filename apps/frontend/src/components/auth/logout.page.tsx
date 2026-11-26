@@ -6,7 +6,7 @@
 // so nothing it receives can send the person anywhere else.
 import { FC, useEffect, useRef, useState } from 'react';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { setCookie } from '@gitroom/frontend/components/layout/layout.context';
+import { clearPageSessionCookies } from '@gitroom/frontend/components/layout/layout.context';
 import {
   broadcastAuth,
   wipeSessionData,
@@ -14,7 +14,7 @@ import {
 
 // Signs out once on load; the sign-out never depends on the server answering.
 export const LogoutPage: FC = () => {
-  const { backendUrl, isSecured } = useVariables();
+  const { backendUrl } = useVariables();
   const started = useRef(false);
   const [failed, setFailed] = useState(false);
 
@@ -36,11 +36,7 @@ export const LogoutPage: FC = () => {
       } catch (err) {
         setFailed(true);
       }
-      if (!isSecured) {
-        setCookie('auth', '', -10);
-        setCookie('showorg', '', -10);
-        setCookie('impersonate', '', -10);
-      }
+      clearPageSessionCookies();
       await wipeSessionData();
       broadcastAuth({ type: 'logout' });
       // The proxy clears the httpOnly auth cookie of this site and lands on the sign-in page

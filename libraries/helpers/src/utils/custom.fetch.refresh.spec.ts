@@ -186,3 +186,49 @@ describe('customFetch token refresh', () => {
     expect(refreshCalls()).toHaveLength(0);
   });
 });
+
+// A session cookie the page can read is a leftover from a run without TLS: over https it is never sent as a
+// header, where it would override the real httpOnly session and loop the tab between the app and sign-in.
+describe('customFetch page-readable session cookies', () => {
+  const realFetch = global.fetch;
+  let sent: RequestInit | undefined;
+
+  beforeEach(() => {
+    sent = undefined;
+    global.fetch = jest.fn(async (_url: any, init: any) => {
+      sent = init;
+      return new Response('{}');
+    }) as any;
+    document.cookie = 'auth=stale;path=/';
+    document.cookie = 'showorg=stale-org;path=/';
+    document.cookie = 'impersonate=stale-user;path=/';
+  });
+  afterEach(() => {
+    ['auth', 'showorg', 'impersonate'].forEach(
+      (name) => (document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`)
+    );
+  });
+  afterAll(() => {
+    global.fetch = realFetch;
+  });
+
+  // The headers of one GET to `/x` through customFetch, secured (https) or not.
+  const headersOf = async (secured: boolean) => {
+    await customFetch({ baseUrl: 'http://backend' }, undefined, undefined, secured)('/x');
+    return sent!.headers as Record<string, string>;
+  };
+
+  it('over https sends none of them, so the httpOnly cookies speak for the session', async () => {
+    const headers = await headersOf(true);
+    expect(headers.auth).toBeUndefined();
+    expect(headers.showorg).toBeUndefined();
+    expect(headers.impersonate).toBeUndefined();
+  });
+
+  it('without TLS still sends them as headers, as before', async () => {
+    const headers = await headersOf(false);
+    expect(headers.auth).toBe('stale');
+    expect(headers.showorg).toBe('stale-org');
+    expect(headers.impersonate).toBe('stale-user');
+  });
+});
