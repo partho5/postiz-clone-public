@@ -141,6 +141,8 @@ model User {
   ownedAccount          Account?             @relation("accountOwner")
   deviceSessions        DeviceSession[]
   activityLogs          ActivityLog[]
+  trackerDevices        TrackerDevice[]
+  trackerActivities     TrackerActivity[]
 
   @@unique([email, providerName])
   @@index([lastReadNotifications])
@@ -2412,6 +2414,85 @@ model ActivityLog {
 
   @@index([userId, firstEventAt])
   @@index([deviceId, firstEventAt])
+  @@index([receivedAt])
+}
+
+// Activity tracker (api.activity-tracker): one phone install. `userId`/`email` are set once a batch arrives with a valid token.
+model TrackerDevice {
+  deviceId      String    @id
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email         String?
+  firstSeenAt   DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  appVersion    String?
+  appBuild      Int?
+  os            String?
+  sdk           Int?
+  manufacturer  String?
+  model         String?
+  locale        String?
+  activityCount Int       @default(0)
+  errorCount    Int       @default(0)
+
+  @@index([userId])
+  @@index([lastSeenAt])
+  @@index([email])
+}
+
+// Activity tracker (api.activity-tracker): one app session of one device (new after 30 min in background).
+model TrackerSession {
+  key           String   @id            // `${deviceId}:${session}`
+  deviceId      String
+  userId        String?
+  session       String
+  startedAt     DateTime
+  endedAt       DateTime
+  entrySource   String?                 // source of the session's app_open / app_foreground
+  firstScreen   String?
+  lastScreen    String?                 // where the session ended: drop-off
+  activityCount Int      @default(0)
+  errorCount    Int      @default(0)
+  appBuild      Int?
+
+  @@index([deviceId, startedAt])
+  @@index([userId, startedAt])
+  @@index([startedAt])
+}
+
+// Activity tracker (api.activity-tracker): one activity or error the app recorded.
+model TrackerActivity {
+  id           String    @id                   // uuid made by the phone
+  deviceId     String
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionKey   String
+  seq          Int
+  kind         String                          // activity | error
+  name         String
+  description  String?
+  startedAt    DateTime
+  endedAt      DateTime?
+  durationMs   Int?
+  tz           Int       @default(0)
+  appBuild     Int?
+  screen       String?
+  source       String?
+  meta         Json?
+  errorType    String?
+  errorMessage String?
+  errorStack   String?
+  errorCauses  Json?
+  errorThread  String?
+  fatal        Boolean?
+  lastActivity String?
+  receivedAt   DateTime  @default(now())
+
+  @@index([deviceId, startedAt])
+  @@index([sessionKey, seq])
+  @@index([userId, startedAt])
+  @@index([name, description])
+  @@index([kind, startedAt])
   @@index([receivedAt])
 }
 
