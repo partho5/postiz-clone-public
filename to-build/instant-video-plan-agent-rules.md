@@ -7,7 +7,7 @@ report and don't do it.
 ## Both repos
 - Work on the branch `feat/instant-video-plan`, which is already checked out. Commit your card when it's done, one or
   a few commits, with messages like `feat(content-plan): IV1 ...`. End every commit message with
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
+  `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (the model that writes the code). Never push.
 - **No heavy runs.** The owner hasn't approved them on this PC: no `pnpm build`, dev server, Gradle build, test suite or
   spec run. Still write the specs or unit tests your card needs, following the existing spec files next to the code.
   Allowed checks:
