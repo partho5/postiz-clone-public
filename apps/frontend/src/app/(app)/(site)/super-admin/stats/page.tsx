@@ -1,0 +1,17 @@
+export const dynamic = 'force-dynamic';
+import { AdminStatsComponent } from '@gitroom/frontend/components/admin/admin-stats.component';
+import { PRODUCT_NAME } from '@gitroom/helpers/brand/brand.identity';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: `${PRODUCT_NAME} Admin Stats`,
+  description: '',
+};
+
+export default async function Page() {
+  return (
+    <div className="bg-newBgColorInner flex-1 min-w-0 flex-col flex p-[20px] gap-[12px]">
+      <AdminStatsComponent />
+    </div>
+  );
+}

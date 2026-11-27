@@ -1,0 +1,30 @@
+{
+  "key": "outline",
+  "effort": "medium",
+  "messages": [
+    {
+      "role": "developer",
+      "content": "Return only the JSON asked for, matching the given schema.\nLanguage: write every text in the language the owner uses in the Content Direction. If that cannot be told, use the\nlanguage given as `locale`. Do not translate the owner's wording into another language and do not add a language the\nowner did not use.\nTrust rules:\n- Use only facts the owner gave. Never state or imply a number, price, discount, date, duration, statistic, result,\n  customer name, quote, testimonial, award or news that the owner did not give.\n- Never make a medical, legal, financial or safety claim the owner did not make, and never promise a result.\n- A story or example must be openly hypothetical (\"imagine someone who...\"), never presented as a real case or a real\n  customer.\n- Ideas must serve the real problems of the owner's customers, as the owner described them.\n- No generic filler openings, no clickbait, no hashtags."
+    },
+    {
+      "role": "user",
+      "content": "Brand: Brightside Dental\n\nLanguage: en\n\nAbout the business:\n{\"audience\":\"Mostly working adults aged 25 to 45 and parents of young children\",\"objections\":[\"Will it hurt?\",\"Treatment is very expensive.\",\"A root canal means losing the tooth.\"],\"problems\":[\"Many put off visits because they are afraid it will hurt\",\"Many believe treatment is very expensive\",\"Some think a root canal means losing the tooth\"],\"solution\":\"Keep it general about calm care, explain that checkups help avoid bigger treatment, and start with first visits and checkups, with the dentist on camera inviting viewers to book a checkup, mostly teaching and mentioning services lightly\",\"tone\":\"calm, friendly, honest\",\"videoSeconds\":60,\"whatWeDo\":\"Brightside Dental is a family dental clinic offering checkups, cleaning, fillings, root canal treatment, braces and children's dentistry\"}\n\nContent direction:\nBrightside Dental is a family dental clinic in a mid-sized city.\n\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\n\nAudience: mostly working adults aged 25 to 45 and parents of young children.\n\nCustomers' core problems:\n- Many put off visits because they are afraid it will hurt\n- Many believe treatment is very expensive\n- Some think a root canal means losing the tooth\n\nHow the clinic wants to address this in videos:\n- Keep it general about calm care to address fear of pain\n- Explain that checkups help avoid bigger treatment to address worry about cost\n- Start with first visits and checkups as the first questions to answer\n\nCommon questions, objections and misunderstandings:\n- Will it hurt?\n- Treatment is very expensive.\n- A root canal means losing the tooth.\n\nTone: calm, friendly, honest.\n\nVideo setup: dentist on camera. Videos invite viewers to book a checkup.\n\nVideo length: about a minute long (60 seconds).\n\nContent balance: mostly teach, mention services lightly."
+    },
+    {
+      "role": "developer",
+      "content": "You get a week idea and its slots. Each slot has an angle, and `videosPerWeek` is the number of slots.\nWrite one short title per slot, in slot order, that fits the slot's angle. With one slot the title carries the\nwhole idea. With a few slots each video stands on its own (never \"part 2\" or \"next time\"). With many slots the\nvideos build on each other. No two titles repeat each other. Never state a fact, number or claim the owner did not\ngive.\n\nAngles, the way a video approaches the problem:\n- problem: open with the customer's problem and show the way out.\n- mistake: a common mistake customers make and what to do instead.\n- story: a short, openly hypothetical story (\"imagine someone who...\") that shows the problem and the way out.\n- question: answer one question customers really ask.\n- comparison: compare two options or two situations fairly.\n- steps: a few simple steps the customer can follow.\n- fear_loss: what a customer risks by waiting, said calmly, with no scare tactics and no invented figure.\n- behind_the_scenes: how the business works, using only what the owner said.\n- customer_voice: say it the way customers say it, as a hypothetical customer, never a real quote.\n- trend: react only to the owner's urgent note."
+    },
+    {
+      "role": "user",
+      "content": "{\"idea\":\"Dentist on camera walks through what calm care during a checkup generally looks like with time to ask questions, and invites you to book a checkup when you feel ready.\",\"clusterTitle\":\"Will it hurt?\",\"problem\":\"I keep putting off a visit because I am afraid it will hurt.\",\"videosPerWeek\":3,\"slots\":[{\"angle\":\"problem\"},{\"angle\":\"mistake\"},{\"angle\":\"story\"}]}"
+    }
+  ],
+  "output": "{\"titles\": [\"Worried it will hurt? See what calm care at a checkup generally looks like\", \"Putting off a checkup from fear? Book a checkup instead of waiting\", \"Imagine someone who keeps putting off a first visit, then books a checkup when ready\"]}",
+  "usage": {
+    "prompt": 1054,
+    "cached": 0,
+    "completion": 2237,
+    "reasoning": 2169,
+    "seconds": 13.1
+  }
+}

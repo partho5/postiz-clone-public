@@ -1,0 +1,7 @@
+limit.maxIDLength:
+  - value: 255
+    constraints: {}
+# Keep the per-namespace RPS modest on a small box.
+frontend.namespaceRPS:
+  - value: 400
+    constraints: {}

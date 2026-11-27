@@ -1,0 +1,101 @@
+{
+  "status": "ACTIVE",
+  "today": "2026-11-23",
+  "timezone": "UTC",
+  "week": {
+    "id": "test-week-1",
+    "weekStart": "2026-11-23",
+    "weekEnd": "2026-11-29",
+    "idea": "A dentist walks through what a routine checkup usually includes and the comfort steps the clinic uses for nervous adults who put off visits.",
+    "status": "READY",
+    "days": [
+      {
+        "id": "test-day-1",
+        "date": "2026-11-23",
+        "dayIndex": 0,
+        "title": "Afraid a Checkup Will Hurt? How We Keep Nervous Visits Calm",
+        "angle": "problem",
+        "why": "Speaks directly to nervous adults who delay checkups from fear of pain.",
+        "beats": [
+          {
+            "hook": "Nervous about checkups",
+            "say": "If you keep putting off a checkup because you are afraid it will hurt, you are not alone. Many adults feel the same way. That worry keeps a lot of people away."
+          },
+          {
+            "hook": "What a checkup covers",
+            "say": "A routine checkup is usually simple. We have a chat, have a look at your teeth and gums, and talk through if anything needs attention. No close-up treatment, just time to understand."
+          },
+          {
+            "hook": "Comfort at your pace",
+            "say": "If you feel nervous, you can tell us right at the start. We explain each step before we do it, check how you are doing, and you can ask for a pause at any time. We are used to helping nervous patients."
+          },
+          {
+            "hook": "A calmer first step",
+            "say": "You do not need to wait until something bothers you. Coming in earlier gives you clear information sooner. And you can bring your questions about pain or cost."
+          }
+        ],
+        "closingLine": "If it helps, book a checkup when you feel ready.",
+        "status": "PLANNED",
+        "version": 1
+      },
+      {
+        "id": "test-day-2",
+        "date": "2026-11-25",
+        "dayIndex": 2,
+        "title": "Waiting Until It Hurts to Book a Checkup? What to Do Instead",
+        "angle": "mistake",
+        "why": "Helps busy adults who wait until pain see a calmer next step.",
+        "beats": [
+          {
+            "hook": "Waiting till it hurts",
+            "say": "If you are waiting until a tooth hurts before you book a checkup, I completely understand why. Many busy adults do the same to avoid discomfort. Work and family life make it easy to delay."
+          },
+          {
+            "hook": "More worry over time",
+            "say": "The common mistake is thinking waiting keeps things calmer. Often, putting it off just means more worry in the background, and questions about pain and cost build up. A small concern can sit in your mind for months."
+          },
+          {
+            "hook": "What to do instead",
+            "say": "Instead, consider a different approach. Book a routine visit just to have a look and talk. You can share your fears, ask about clear pricing, and hear what is actually needed."
+          },
+          {
+            "hook": "Clear information first",
+            "say": "That way you have clear information, not guesses. Things feel easier to think about when everything is explained calmly and honestly. Bring a list of questions if you like."
+          }
+        ],
+        "closingLine": "Book a checkup when you want clear answers.",
+        "status": "PLANNED",
+        "version": 1
+      },
+      {
+        "id": "test-day-3",
+        "date": "2026-11-27",
+        "dayIndex": 4,
+        "title": "Imagine Someone Who Keeps Putting Off a Checkup From Fear",
+        "angle": "story",
+        "why": "Shows parents and working adults themselves in a gentle hypothetical story.",
+        "beats": [
+          {
+            "hook": "Imagine putting it off",
+            "say": "Imagine someone who keeps putting off a checkup for years because they are afraid it will hurt. If that sounds like you, you are not alone. They worry the visit itself will be uncomfortable."
+          },
+          {
+            "hook": "Busy life, background worry",
+            "say": "They are busy with work and kids, so it is easy to delay. In the background, they keep wondering about pain, cost, and whether they really need treatment. The thought of a root canal and losing a tooth worries them too."
+          },
+          {
+            "hook": "A simple first visit",
+            "say": "One day they book a simple checkup just to ask questions. They tell the dentist they feel nervous, hear each step explained, and can ask for a pause. Nothing rushed, just time to talk."
+          },
+          {
+            "hook": "Leaving with clarity",
+            "say": "They leave with a clearer picture and no pressure. It is easier to think about next steps once they know what is going on. That first calm chat is just about understanding."
+          }
+        ],
+        "closingLine": "Book a checkup when you feel ready to ask.",
+        "status": "PLANNED",
+        "version": 1
+      }
+    ]
+  }
+}

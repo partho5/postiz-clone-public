@@ -1,0 +1,278 @@
+{
+  "direction": "Brightside Dental is a family dental clinic in a mid-sized city.\n\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\n\nAudience: mostly working adults aged 25 to 45 and parents of young children.\n\nCustomers' core problems:\n- Many put off visits because they are afraid it will hurt\n- Many believe treatment is very expensive\n- Some think a root canal means losing the tooth\n\nHow the clinic wants to address this in videos:\n- Keep it general about calm care to address fear of pain\n- Explain that checkups help avoid bigger treatment to address worry about cost\n- Start with first visits and checkups as the first questions to answer\n\nCommon questions, objections and misunderstandings:\n- Will it hurt?\n- Treatment is very expensive.\n- A root canal means losing the tooth.\n\nTone: calm, friendly, honest.\n\nVideo setup: dentist on camera. Videos invite viewers to book a checkup.\n\nVideo length: about a minute long (60 seconds).\n\nContent balance: mostly teach, mention services lightly.",
+  "facts": {
+    "audience": "Mostly working adults aged 25 to 45 and parents of young children",
+    "objections": [
+      "Will it hurt?",
+      "Treatment is very expensive.",
+      "A root canal means losing the tooth."
+    ],
+    "problems": [
+      "Many put off visits because they are afraid it will hurt",
+      "Many believe treatment is very expensive",
+      "Some think a root canal means losing the tooth"
+    ],
+    "solution": "Keep it general about calm care, explain that checkups help avoid bigger treatment, and start with first visits and checkups, with the dentist on camera inviting viewers to book a checkup, mostly teaching and mentioning services lightly",
+    "tone": "calm, friendly, honest",
+    "videoSeconds": 60,
+    "whatWeDo": "Brightside Dental is a family dental clinic offering checkups, cleaning, fillings, root canal treatment, braces and children's dentistry"
+  },
+  "themes": [
+    {
+      "description": "Helping nervous adults feel more at ease about coming in for care.",
+      "name": "Calm, comfortable care",
+      "ref": "T1"
+    },
+    {
+      "description": "Showing how checkups help avoid bigger treatment and worry about cost.",
+      "name": "Checkups and avoiding bigger treatment",
+      "ref": "T2"
+    },
+    {
+      "description": "Answering basic questions about cleaning, fillings, root canal treatment and braces in simple terms.",
+      "name": "Everyday treatments explained",
+      "ref": "T3"
+    },
+    {
+      "description": "Answering parents' first questions about checkups and children's dentistry.",
+      "name": "Children's visits for parents",
+      "ref": "T4"
+    }
+  ],
+  "clusters": [
+    {
+      "problem": "I keep putting off a visit because I am afraid it will hurt.",
+      "ref": "C1",
+      "themeRef": "T1",
+      "title": "Will it hurt?"
+    },
+    {
+      "problem": "I have not been for a long time and I feel nervous about going back.",
+      "ref": "C2",
+      "themeRef": "T1",
+      "title": "I have not been for a long time and I feel nervous, where do I start?"
+    },
+    {
+      "problem": "I worry I will feel anxious in the chair and will not cope.",
+      "ref": "C3",
+      "themeRef": "T1",
+      "title": "What if I feel anxious in the chair?"
+    },
+    {
+      "problem": "I want a cleaning but I am afraid it will hurt.",
+      "ref": "C4",
+      "themeRef": "T1",
+      "title": "Does a cleaning hurt?"
+    },
+    {
+      "problem": "I worry treatment will be very expensive so I put off coming in.",
+      "ref": "C5",
+      "themeRef": "T2",
+      "title": "Is treatment very expensive?"
+    },
+    {
+      "problem": "I do not see why I need a checkup when nothing hurts.",
+      "ref": "C6",
+      "themeRef": "T2",
+      "title": "Why come for a checkup if nothing hurts?"
+    },
+    {
+      "problem": "I want to know if checkups can help me avoid bigger treatment later.",
+      "ref": "C7",
+      "themeRef": "T2",
+      "title": "Can a checkup help me avoid bigger treatment?"
+    },
+    {
+      "problem": "I keep putting off a small problem and wonder what happens if I wait.",
+      "ref": "C8",
+      "themeRef": "T2",
+      "title": "What happens if I keep putting off a small problem?"
+    },
+    {
+      "problem": "I think a root canal means losing the tooth and I am worried about it.",
+      "ref": "C9",
+      "themeRef": "T3",
+      "title": "Does a root canal mean losing the tooth?"
+    },
+    {
+      "problem": "I have been told I might need a filling and I do not understand what it is for.",
+      "ref": "C10",
+      "themeRef": "T3",
+      "title": "What is a filling for?"
+    },
+    {
+      "problem": "I may need root canal treatment and I want a simple general idea of what it involves.",
+      "ref": "C11",
+      "themeRef": "T3",
+      "title": "What happens during root canal treatment?"
+    },
+    {
+      "problem": "I am an adult and I wonder if braces are only for children.",
+      "ref": "C12",
+      "themeRef": "T3",
+      "title": "Are braces only for kids?"
+    },
+    {
+      "problem": "I am a parent and I do not know when to bring my child for a first visit.",
+      "ref": "C13",
+      "themeRef": "T4",
+      "title": "When should my child first come in?"
+    },
+    {
+      "problem": "I am a parent and I want to know what happens at a children's checkup.",
+      "ref": "C14",
+      "themeRef": "T4",
+      "title": "What happens at my child's checkup?"
+    },
+    {
+      "problem": "I worry my child will be scared at the dentist.",
+      "ref": "C15",
+      "themeRef": "T4",
+      "title": "Will my child be scared?"
+    },
+    {
+      "problem": "I am a parent and I wonder if my child needs a checkup when the teeth look fine.",
+      "ref": "C16",
+      "themeRef": "T4",
+      "title": "My child's teeth look fine, does he still need a checkup?"
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "weekStart": "2026-11-23",
+      "cluster": "Will it hurt?",
+      "idea": "Dentist on camera walks through what calm care during a checkup generally looks like with time to ask questions, and invites you to book a checkup when you feel ready.",
+      "outline": [
+        {
+          "title": "Worried it will hurt? See what calm care at a checkup",
+          "angle": "problem"
+        },
+        {
+          "title": "Putting off a checkup from fear? Book a checkup instead of",
+          "angle": "mistake"
+        },
+        {
+          "title": "Imagine someone who keeps putting off a first visit, then",
+          "angle": "story"
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "weekStart": "2026-11-30",
+      "cluster": "Is treatment very expensive?",
+      "idea": "Dentist on camera explains how starting with checkups can help avoid bigger treatment later for anyone worried about cost, and invites you to book a checkup to talk it through.",
+      "outline": [
+        {
+          "title": "The Mistake of Skipping a Checkup to Save Money",
+          "angle": "mistake"
+        },
+        {
+          "title": "Imagine Someone Who Keeps Putting Off a Visit Over Cost",
+          "angle": "story"
+        },
+        {
+          "title": "Is Treatment Very Expensive? Book a Checkup to Talk It",
+          "angle": "question"
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "weekStart": "2026-12-07",
+      "cluster": "Does a root canal mean losing the tooth?",
+      "idea": "Dentist on camera talks through the common worry that a root canal means losing the tooth in simple general terms, and invites you to book a checkup to ask questions.",
+      "outline": [
+        {
+          "title": "Imagine someone who thinks a root canal means losing the",
+          "angle": "story"
+        },
+        {
+          "title": "Does a root canal mean losing the tooth?",
+          "angle": "question"
+        },
+        {
+          "title": "Worrying at home or asking about it at a checkup",
+          "angle": "comparison"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "weekStart": "2026-12-14",
+      "cluster": "When should my child first come in?",
+      "idea": "Dentist on camera explains how first visits and checkups for young children generally begin and what parents can ask about, and invites you to book a checkup for your child.",
+      "outline": [
+        {
+          "title": "When should I bring my child for a first checkup?",
+          "angle": "question"
+        },
+        {
+          "title": "A calm first checkup now or a first visit when it hurts?",
+          "angle": "comparison"
+        },
+        {
+          "title": "Simple steps to book your child's first calm checkup",
+          "angle": "steps"
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "weekStart": "2026-12-21",
+      "cluster": "I have not been for a long time and I feel nervous, where do I start?",
+      "idea": "Dentist on camera explains how to start back with a simple first visit and checkup after a long gap with time to talk, and invites you to book a checkup when you feel ready.",
+      "outline": null
+    },
+    {
+      "week": 6,
+      "weekStart": "2026-12-28",
+      "cluster": "Why come for a checkup if nothing hurts?",
+      "idea": "Dentist on camera explains why coming for a checkup even when nothing hurts can help avoid bigger treatment later, and invites you to book a checkup to stay on track.",
+      "outline": null
+    },
+    {
+      "week": 7,
+      "weekStart": "2027-01-04",
+      "cluster": "What is a filling for?",
+      "idea": "Dentist on camera explains in simple general terms what a filling is for and what you can ask at a checkup, and invites you to book a checkup if you were told you might need one.",
+      "outline": null
+    },
+    {
+      "week": 8,
+      "weekStart": "2027-01-11",
+      "cluster": "What happens at my child's checkup?",
+      "idea": "Dentist on camera walks through what generally happens at a children's checkup so parents know what to expect, and invites you to book a checkup for your child.",
+      "outline": null
+    },
+    {
+      "week": 9,
+      "weekStart": "2027-01-18",
+      "cluster": "What if I feel anxious in the chair?",
+      "idea": "Dentist on camera explains how you can speak up, ask for explanations and take pauses if you feel anxious in the chair, and invites you to book a checkup to talk it through first.",
+      "outline": null
+    },
+    {
+      "week": 10,
+      "weekStart": "2027-01-25",
+      "cluster": "Can a checkup help me avoid bigger treatment?",
+      "idea": "Dentist on camera explains the general idea that checkups help avoid bigger treatment and why starting there makes sense, and invites you to book a checkup to learn more.",
+      "outline": null
+    },
+    {
+      "week": 11,
+      "weekStart": "2027-02-01",
+      "cluster": "What happens during root canal treatment?",
+      "idea": "Dentist on camera gives a simple general outline of what happens during root canal treatment and what you can ask about, and invites you to book a checkup to talk it through.",
+      "outline": null
+    },
+    {
+      "week": 12,
+      "weekStart": "2027-02-08",
+      "cluster": "Will my child be scared?",
+      "idea": "Dentist on camera talks through how calm care is used during children's visits and how parents can help prepare, and invites you to book a checkup for your child.",
+      "outline": null
+    }
+  ]
+}

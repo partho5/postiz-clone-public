@@ -1,0 +1,10 @@
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:5000 {
+		# Long uploads and slow clients: never cut a request mid-flight.
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+}

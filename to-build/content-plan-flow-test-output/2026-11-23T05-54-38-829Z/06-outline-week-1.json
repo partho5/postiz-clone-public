@@ -1,0 +1,30 @@
+{
+  "key": "outline",
+  "effort": "medium",
+  "messages": [
+    {
+      "role": "developer",
+      "content": "Return only the JSON asked for, matching the given schema.\nLanguage: write every text in the language the owner uses in the Content Direction. If that cannot be told, use the\nlanguage given as `locale`. Do not translate the owner's wording into another language and do not add a language the\nowner did not use.\nTrust rules:\n- Use only facts the owner gave. Never state or imply a number, price, discount, date, duration, statistic, result,\n  customer name, quote, testimonial, award or news that the owner did not give.\n- Never make a medical, legal, financial or safety claim the owner did not make, and never promise a result.\n- A story or example must be openly hypothetical (\"imagine someone who...\"), never presented as a real case or a real\n  customer.\n- Ideas must serve the real problems of the owner's customers, as the owner described them.\n- No generic filler openings, no clickbait, no hashtags."
+    },
+    {
+      "role": "user",
+      "content": "Brand: Brightside Dental\n\nLanguage: en\n\nAbout the business:\n{\"audience\":\"mostly working adults aged 25 to 45 and parents of young children\",\"objections\":[\"fear it will hurt\",\"belief treatment is very expensive\",\"belief that root canal means losing the tooth\"],\"problems\":[\"many put off visits because they are afraid it will hurt\",\"they believe treatment is very expensive\",\"some think a root canal means losing the tooth\"],\"solution\":\"comfort steps for patients who are afraid, and clear pricing for patients worried about cost\",\"tone\":\"calm, friendly, honest\",\"videoSeconds\":60,\"whatWeDo\":\"Brightside Dental is a family dental clinic in a mid-sized city offering checkups, cleaning, fillings, root canal treatment, braces and children's dentistry\"}\n\nContent direction:\nBrightside Dental is a family dental clinic in a mid-sized city.\n\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\n\nAudience: mostly working adults aged 25 to 45 and parents of young children.\n\nCustomers' core problems: many put off visits because they are afraid it will hurt and they believe treatment is very expensive. Some think a root canal means losing the tooth.\n\nHow the business helps: comfort steps for patients who are afraid, and clear pricing for patients worried about cost.\n\nCommon questions patients ask about most: pain, cost, and whether treatment is needed.\n\nObjections and misunderstandings: fear it will hurt, belief treatment is very expensive, belief that root canal means losing the tooth.\n\nTone: calm, friendly, honest.\n\nVideo plan: usual length 60 seconds. Mostly teach and reassure, mention services lightly.\n\nViewer next step: book a checkup.\n\nOn camera: a dentist from the clinic.\n\nOwner insists on: avoid close-up treatment scenes."
+    },
+    {
+      "role": "developer",
+      "content": "You get a week idea and its slots. Each slot has an angle, and `videosPerWeek` is the number of slots.\nWrite one short title per slot, in slot order, that fits the slot's angle. With one slot the title carries the\nwhole idea. With a few slots each video stands on its own (never \"part 2\" or \"next time\"). With many slots the\nvideos build on each other. No two titles repeat each other. Never state a fact, number or claim the owner did not\ngive.\n\nAngles, the way a video approaches the problem:\n- problem: open with the customer's problem and show the way out.\n- mistake: a common mistake customers make and what to do instead.\n- story: a short, openly hypothetical story (\"imagine someone who...\") that shows the problem and the way out.\n- question: answer one question customers really ask.\n- comparison: compare two options or two situations fairly.\n- steps: a few simple steps the customer can follow.\n- fear_loss: what a customer risks by waiting, said calmly, with no scare tactics and no invented figure.\n- behind_the_scenes: how the business works, using only what the owner said.\n- customer_voice: say it the way customers say it, as a hypothetical customer, never a real quote.\n- trend: react only to the owner's urgent note."
+    },
+    {
+      "role": "user",
+      "content": "{\"idea\":\"A dentist walks through what a routine checkup usually includes and the comfort steps the clinic uses for nervous adults who put off visits.\",\"clusterTitle\":\"Putting off a checkup because I am afraid it will hurt\",\"problem\":\"I keep putting off my checkup because I am afraid it will hurt\",\"videosPerWeek\":3,\"slots\":[{\"angle\":\"problem\"},{\"angle\":\"mistake\"},{\"angle\":\"story\"}]}"
+    }
+  ],
+  "output": "{\"titles\": [\"Afraid a Checkup Will Hurt? How We Keep Nervous Visits Calm\", \"Waiting Until It Hurts to Book a Checkup? What to Do Instead\", \"Imagine Someone Who Keeps Putting Off a Checkup From Fear\"]}",
+  "usage": {
+    "prompt": 998,
+    "cached": 0,
+    "completion": 1123,
+    "reasoning": 1060,
+    "seconds": 8.8
+  }
+}

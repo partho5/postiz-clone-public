@@ -1,0 +1,5 @@
+{
+  "regions": ["bom1"],
+  "functions": { "api/relay.js": { "maxDuration": 300 } },
+  "rewrites": [{ "source": "/v1/:p*", "destination": "/api/relay?p=:p*" }]
+}

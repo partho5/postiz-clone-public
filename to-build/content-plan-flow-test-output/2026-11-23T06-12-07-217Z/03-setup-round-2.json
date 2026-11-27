@@ -1,0 +1,46 @@
+{
+  "key": "setup",
+  "effort": "low",
+  "messages": [
+    {
+      "role": "developer",
+      "content": "Return only the JSON asked for, matching the given schema.\nLanguage: write every text in the language the owner uses in the Content Direction. If that cannot be told, use the\nlanguage given as `locale`. Do not translate the owner's wording into another language and do not add a language the\nowner did not use.\nTrust rules:\n- Use only facts the owner gave. Never state or imply a number, price, discount, date, duration, statistic, result,\n  customer name, quote, testimonial, award or news that the owner did not give.\n- Never make a medical, legal, financial or safety claim the owner did not make, and never promise a result.\n- A story or example must be openly hypothetical (\"imagine someone who...\"), never presented as a real case or a real\n  customer.\n- Ideas must serve the real problems of the owner's customers, as the owner described them.\n- No generic filler openings, no clickbait, no hashtags."
+    },
+    {
+      "role": "user",
+      "content": "Brand: Brightside Dental\n\nLanguage: en"
+    },
+    {
+      "role": "developer",
+      "content": "You are a content strategist interviewing a business owner so that short social videos can be planned for years.\nThe conversation holds `sourceText` (what the owner first wrote), your earlier rounds, the owner's answers, and any\nedits the owner made to your summary (the newest edit wins).\nEach round:\n1. Rewrite `direction` as a clear, well-spaced summary in short paragraphs or bullets: what the business does, for\n   whom, the customers' core problems, how the business solves them, common questions, objections or\n   misunderstandings, the tone, and anything the owner insists on. Keep every answer and every owner edit. Never\n   drop something the owner wrote and never add a fact the owner did not give.\n2. The summary must also state the usual video length (30, 60, 90 or 120 seconds) and how often videos should\n   mention the product or service versus teach or tell a story. When either is unknown, ask one question for it,\n   with a recommended option.\n3. Ask only questions whose answer would change the plan: at most 4, each with 2 to 4 concrete options and one\n   recommended option. Keep each question short and natural. Never ask again what is already answered or written.\n   Ask fewer questions each round.\n4. Set `readyForPlan` to true when nothing important is open."
+    },
+    {
+      "role": "user",
+      "content": "{\"sourceText\":\"We run Brightside Dental, a family dental clinic in a mid-sized city. We offer checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\\nOur patients are mostly working adults aged 25 to 45 and parents of young children. Many put off visits because they are afraid it will hurt and they believe treatment is very expensive. Some think a root canal means losing the tooth.\\nWe want calm, friendly, honest videos. Videos should be about a minute long.\"}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"direction\": \"Brightside Dental is a family dental clinic in a mid-sized city.\\n\\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\\n\\nAudience: mostly working adults aged 25 to 45 and parents of young children.\\n\\nCustomer problems:\\n- Many put off visits because they are afraid it will hurt\\n- Many believe treatment is very expensive\\n- Some think a root canal means losing the tooth\\n\\nHow the clinic solves these concerns: not yet described.\\n\\nCommon questions, objections or misunderstandings so far:\\n- Will it hurt?\\n- Treatment is very expensive.\\n- Root canal means losing the tooth.\\n\\nTone insisted on: calm, friendly, honest videos.\\n\\nVideo length: about a minute long (60 seconds).\\n\\nHow often to mention services vs teach or tell a story: not yet decided - see question below.\", \"questions\": [{\"options\": [\"Mostly teach, mention services lightly\", \"Half teach, half mention services\", \"Mostly talk about services\"], \"recommendedIndex\": 0, \"text\": \"How often should videos mention your services versus just teach or tell a story?\"}, {\"options\": [\"Explain your gentle steps\", \"Keep it general about calm care\", \"Show patient routines\"], \"recommendedIndex\": 1, \"text\": \"What should we say to calm fear that visits will hurt?\"}, {\"options\": [\"Checkups help avoid bigger treatment\", \"Explain what affects cost\", \"Avoid talking about cost\"], \"recommendedIndex\": 0, \"text\": \"How should videos handle worries that treatment is very expensive?\"}, {\"options\": [\"First visits and checkups\", \"Braces and root canals\", \"Children's dentistry\"], \"recommendedIndex\": 0, \"text\": \"Which patient questions should we answer first in videos?\"}], \"readyForPlan\": false}"
+    },
+    {
+      "role": "user",
+      "content": "{\"answers\":[{\"question\":\"How often should videos mention your services versus just teach or tell a story?\",\"answer\":\"Mostly teach, mention services lightly\"},{\"question\":\"What should we say to calm fear that visits will hurt?\",\"answer\":\"Keep it general about calm care\"},{\"question\":\"How should videos handle worries that treatment is very expensive?\",\"answer\":\"Checkups help avoid bigger treatment\"},{\"question\":\"Which patient questions should we answer first in videos?\",\"answer\":\"First visits and checkups\"}],\"editedDirection\":null}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"direction\": \"Brightside Dental is a family dental clinic in a mid-sized city.\\n\\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\\n\\nAudience: mostly working adults aged 25 to 45 and parents of young children.\\n\\nCustomers' core problems:\\n- Many put off visits because they are afraid it will hurt\\n- Many believe treatment is very expensive\\n- Some think a root canal means losing the tooth\\n\\nHow the clinic wants to address this in videos:\\n- Keep it general about calm care to address fear of pain\\n- Explain that checkups help avoid bigger treatment to address worry about cost\\n- Start with first visits and checkups as the first questions to answer\\n\\nCommon questions, objections and misunderstandings:\\n- Will it hurt?\\n- Treatment is very expensive.\\n- A root canal means losing the tooth.\\n\\nTone: calm, friendly, honest.\\n\\nVideo length: about a minute long (60 seconds).\\n\\nContent balance: mostly teach, mention services lightly.\", \"questions\": [{\"options\": [\"Dentist on camera\", \"Dentist plus team members\", \"Voiceover with clinic footage\"], \"recommendedIndex\": 0, \"text\": \"Who should appear in the videos?\"}, {\"options\": [\"Book a checkup\", \"Ask a question in the comments\", \"Just follow for tips\"], \"recommendedIndex\": 0, \"text\": \"What should videos invite viewers to do next?\"}], \"readyForPlan\": false}"
+    },
+    {
+      "role": "user",
+      "content": "{\"answers\":[{\"question\":\"Who should appear in the videos?\",\"answer\":\"Dentist on camera\"},{\"question\":\"What should videos invite viewers to do next?\",\"answer\":\"Book a checkup\"}],\"editedDirection\":null}"
+    }
+  ],
+  "output": "{\"direction\": \"Brightside Dental is a family dental clinic in a mid-sized city.\\n\\nServices: checkups, cleaning, fillings, root canal treatment, braces and children's dentistry.\\n\\nAudience: mostly working adults aged 25 to 45 and parents of young children.\\n\\nCustomers' core problems:\\n- Many put off visits because they are afraid it will hurt\\n- Many believe treatment is very expensive\\n- Some think a root canal means losing the tooth\\n\\nHow the clinic wants to address this in videos:\\n- Keep it general about calm care to address fear of pain\\n- Explain that checkups help avoid bigger treatment to address worry about cost\\n- Start with first visits and checkups as the first questions to answer\\n\\nCommon questions, objections and misunderstandings:\\n- Will it hurt?\\n- Treatment is very expensive.\\n- A root canal means losing the tooth.\\n\\nTone: calm, friendly, honest.\\n\\nVideo setup: dentist on camera. Videos invite viewers to book a checkup.\\n\\nVideo length: about a minute long (60 seconds).\\n\\nContent balance: mostly teach, mention services lightly.\", \"questions\": [], \"readyForPlan\": true}",
+  "usage": {
+    "prompt": 1706,
+    "cached": 1265,
+    "completion": 588,
+    "reasoning": 328,
+    "seconds": 4.1
+  }
+}

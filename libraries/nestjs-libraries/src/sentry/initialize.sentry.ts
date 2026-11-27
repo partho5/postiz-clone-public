@@ -1,0 +1,80 @@
+import { PRODUCT_NAME } from '@gitroom/helpers/brand/brand.identity';
+import * as Sentry from '@sentry/nestjs';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import { capitalize } from 'lodash';
+
+export const setSentryUserContext = (params: {
+  userId?: string;
+  email?: string;
+  orgId?: string;
+}) => {
+  try {
+    Sentry.setUser(
+      params.userId
+        ? { id: params.userId, ...(params.email ? { email: params.email } : {}) }
+        : null
+    );
+    if (params.orgId) {
+      Sentry.setTag('organization.id', params.orgId);
+    }
+  } catch (err) {
+    /* never let telemetry break a request */
+  }
+};
+
+export const initializeSentry = (appName: string, allowLogs = false) => {
+  if (!process.env.NEXT_PUBLIC_SENTRY_DSN) {
+    return null;
+  }
+
+  try {
+    Sentry.init({
+      initialScope: {
+        tags: {
+          service: appName,
+          component: 'nestjs',
+        },
+        contexts: {
+          app: {
+            name: `${PRODUCT_NAME} ${capitalize(appName)}`,
+          },
+        },
+      },
+      environment: process.env.NODE_ENV || 'development',
+      dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+      spotlight: process.env.SENTRY_SPOTLIGHT === '1',
+      integrations: [
+        // Add our Profiling integration
+        nodeProfilingIntegration(),
+        Sentry.consoleLoggingIntegration({ levels: ['log', 'info', 'warn', 'error', 'debug', 'assert', 'trace'] }),
+        Sentry.openAIIntegration({
+          recordInputs: true,
+          recordOutputs: true,
+        }),
+      ],
+      tracesSampler: ({ name, attributes, normalizedRequest, inheritOrSampleWith }) => {
+        const path = String(
+          normalizedRequest?.url || attributes?.['http.target'] || attributes?.['url.path'] || name || ''
+        );
+        const method = String(
+          normalizedRequest?.method || attributes?.['http.request.method'] || attributes?.['http.method'] || ''
+        );
+        // MCP stream GETs are declined with 405; never trace them
+        if (method === 'GET' && /^(https?:\/\/[^/]+)?\/mcp(\/|-oauth|\?|$)/.test(path)) {
+          return 0;
+        }
+        return inheritOrSampleWith(
+          path.includes('/public/v1/analytics/') ? 0.01 : 0.1
+        );
+      },
+      enableLogs: true,
+
+      // Profiling
+      profileSessionSampleRate: process.env.NODE_ENV === 'development' ? 1.0 : 0.2,
+      profileLifecycle: 'trace',
+    });
+  } catch (err) {
+    console.log(err);
+  }
+  return true;
+};

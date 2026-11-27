@@ -1,0 +1,8 @@
+# Used when the server already has its own web server on 80/443 (HOST_NGINX=1 in deploy/.env):
+# Caddy is not started and the app is published on localhost only, for the host nginx to proxy to.
+services:
+  caddy:
+    profiles: [disabled]
+  app:
+    ports:
+      - '127.0.0.1:${APP_HOST_PORT:-3000}:5000'
