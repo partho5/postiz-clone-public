@@ -141,4 +141,17 @@ Verification is deferred by the owner (2026-11-27): coders only for now, and eve
 | IV5 | done, awaiting verify | web c46364c0 | |
 | IV6 | done, awaiting verify | FaceCam b85b2fe | |
 | IV7 | done, awaiting verify | FaceCam eb8563f | |
-| IV8 | in progress | | |
+| IV8 | done, awaiting verify | web 312368b9 | |
+
+## Later cleanup (after IV8 is verified and has been live for a deploy or two)
+IV8 moved the plan setup onto the engine and stopped writing the old setup storage, but dropped nothing, so an older
+release and a rollback still find their rows. Once IV8 has run in production without a rollback:
+- Drop the table `ContentPlanRound` (and the relation `ContentPlan.rounds`).
+- Drop the setup-only columns of `ContentPlan`: `proposal`, `proposalVersion`, `proposalTurns`. Check `busy`, `notice` and
+  `status` first: the weekly engine still uses them (`busy` for replan and instant, `notice`, and `status` SETUP | ACTIVE), so
+  they stay. `PROPOSED` is no longer written to `ContentPlan.status`; a row that still holds it reads as SETUP.
+- Remove the legacy job kinds `proposal` and `revise` from `PlanJob`, the activity cases and
+  `ContentPlanSetupService.buildProposal` / `proposalFailed`, once no workflow with those kinds can still be queued.
+- Remove the old routes `/setup/start`, `/setup/answer`, `/proposal`, `/proposal/revise` and `/confirm` (and the service
+  `ContentPlanSetupService`) once no tab from before IV8 can still be open; the frontend calls `/content-plan/sessions` now.
+- Delete the sessions of kind `plan` that are DONE or DISCARDED if their size ever matters; nothing reads them.

@@ -41,3 +41,12 @@ Other codes:
 - 404 `PLAN_NOT_FOUND`, `SESSION_NOT_FOUND`
 - 502 `PLAN_AI_FAILED`
 - 503 `PLAN_NOT_AVAILABLE`
+
+## The `plan` kind (IV8, the plan setup)
+`kind: 'plan'` is the brand's plan setup on the same routes. It is refused with 409 `PLAN_EXISTS` while the plan is ACTIVE,
+and it makes the workspace's plan row when there is none. `options` is `{ videosPerWeek?: 1..7 }` on start (the plan's own
+number by default) and on `POST /sessions/:id/propose`, which now takes an optional `options` the kind checks (a kind that
+takes none answers 400 `INVALID_PLAN` on path `options`). `proposal` is the plan proposal (`facts`, `themes`, `clusters`,
+`weeks`, `version`). `confirm` makes the plan ACTIVE with the session summary as its direction; send no `edits`.
+The old routes `/setup/start`, `/setup/answer`, `/proposal`, `/proposal/revise` and `/confirm` still work and call this
+session; `GET /content-plan` keeps its shape, drawn from the session.
