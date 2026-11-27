@@ -1,4 +1,4 @@
-// Activity tracker (api.activity-tracker): /super-admin/activity, the period overview (stats, top features, drop-off, entry sources, top errors) and the device table.
+// Activity tracker (api.activity-tracker): /super-admin/activity, the activity log of every device, under a closed summary of a period (stats, top features, drop-off, entry sources, top errors, device table).
 'use client';
 
 import React, { FC, ReactNode, useEffect, useState } from 'react';
@@ -19,6 +19,7 @@ import {
   useTrackerDevices,
   useTrackerOverview,
 } from '@gitroom/frontend/components/admin/tracker/tracker.hooks';
+import { TrackerLog } from '@gitroom/frontend/components/admin/tracker/tracker.log';
 
 dayjs.extend(relativeTime);
 
@@ -380,11 +381,13 @@ const DevicesTable: FC = () => {
   );
 };
 
-// The Activity tab: a period picker, the overview of that period and the device table under it.
-export const TrackerHome: FC = () => {
+// The summary of a period, closed by default: a period picker, the stat tiles, the overview panels and the device table.
+const TrackerSummary: FC = () => {
   const t = useT();
+  const [open, setOpen] = useState(false);
   const [days, setDays] = useState(7);
-  const { data, isLoading, error } = useTrackerOverview(days);
+  // The overview is only read once the summary is opened.
+  const { data, isLoading, error } = useTrackerOverview(open ? days : null);
 
   const periods = [
     { days: 1, label: t('activity_period_1_day', 'Last day') },
@@ -394,56 +397,90 @@ export const TrackerHome: FC = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-[16px] text-textColor w-full min-w-0">
-      <div className="flex flex-wrap gap-[8px] items-center justify-between">
-        <div className="text-[20px] font-[600]">
-          {t('view_activity', 'Activity')}
-        </div>
-        <select
-          value={days}
-          onChange={(e) => setDays(parseInt(e.target.value, 10))}
-          className="bg-newBgColorInner h-[38px] border border-newTableBorder rounded-[8px] px-[10px] text-[14px] text-textColor"
+    <div className="border border-newTableBorder rounded-[8px] bg-newBgColorInner min-w-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="activity-summary"
+        onClick={() => setOpen((held) => !held)}
+        className="group w-full flex items-center justify-between gap-[8px] px-[12px] min-h-[44px] text-start text-[14px] font-[600] rounded-[8px] hover:bg-boxHover outline-none focus-visible:ring-[3px] focus-visible:ring-btnPrimary/40"
+      >
+        {t('activity_summary', 'Summary')}
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className={`h-[18px] w-[18px] opacity-60 group-hover:opacity-100 transition motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
         >
-          {periods.map((p) => (
-            <option key={p.days} value={p.days}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {isLoading ? (
-        <LoadingComponent />
-      ) : error || !data ? (
-        <div className="text-red-400">
-          {t('activity_overview_failed', 'Failed to load the activity overview.')}
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div
+          id="activity-summary"
+          className="flex flex-col gap-[16px] p-[12px] border-t border-newTableBorder min-w-0"
+        >
+          <div className="flex justify-end">
+            <select
+              value={days}
+              onChange={(e) => setDays(parseInt(e.target.value, 10))}
+              className="bg-newBgColorInner h-[38px] border border-newTableBorder rounded-[8px] px-[10px] text-[14px] text-textColor"
+            >
+              {periods.map((p) => (
+                <option key={p.days} value={p.days}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {isLoading ? (
+            <LoadingComponent />
+          ) : error || !data ? (
+            <div className="text-red-400">
+              {t('activity_overview_failed', 'Failed to load the activity overview.')}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-[12px]">
+                <StatTile label={t('activity_stat_devices', 'Devices')} value={data.devices} />
+                <StatTile
+                  label={t('activity_stat_active_devices', 'Active devices')}
+                  value={data.activeDevices}
+                />
+                <StatTile label={t('activity_stat_sessions', 'Sessions')} value={data.sessions} />
+                <StatTile label={t('activity_stat_activities', 'Activities')} value={data.activities} />
+                <StatTile
+                  label={t('activity_stat_errors', 'Errors')}
+                  value={data.errors}
+                  alert={data.errors > 0}
+                />
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-[12px]">
+                <TopFeatures rows={data.topFeatures} activeDevices={data.activeDevices} />
+                <TopErrors rows={data.topErrors} />
+                <DropOff rows={data.dropOff} />
+                <EntrySources rows={data.entrySources} />
+              </div>
+            </>
+          )}
+          <DevicesTable />
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-[12px]">
-            <StatTile label={t('activity_stat_devices', 'Devices')} value={data.devices} />
-            <StatTile
-              label={t('activity_stat_active_devices', 'Active devices')}
-              value={data.activeDevices}
-            />
-            <StatTile label={t('activity_stat_sessions', 'Sessions')} value={data.sessions} />
-            <StatTile label={t('activity_stat_activities', 'Activities')} value={data.activities} />
-            <StatTile
-              label={t('activity_stat_errors', 'Errors')}
-              value={data.errors}
-              alert={data.errors > 0}
-            />
-          </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-[12px]">
-            <TopFeatures rows={data.topFeatures} activeDevices={data.activeDevices} />
-            <TopErrors rows={data.topErrors} />
-            <DropOff rows={data.dropOff} />
-            <EntrySources rows={data.entrySources} />
-          </div>
-        </>
-      )}
+      ) : null}
+    </div>
+  );
+};
 
-      <DevicesTable />
+// The Activity tab: the activity log of every device, with the period summary closed above it.
+export const TrackerHome: FC = () => {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-[16px] text-textColor w-full min-w-0">
+      <div className="text-[20px] font-[600]">{t('view_activity', 'Activity')}</div>
+      <TrackerSummary />
+      <TrackerLog />
     </div>
   );
 };

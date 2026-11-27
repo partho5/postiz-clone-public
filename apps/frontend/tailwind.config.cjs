@@ -138,6 +138,7 @@ module.exports = {
         newMessages: 'newMessages 1s ease-in-out 4s forwards',
         marqueeUp: 'marquee-up 100s linear infinite',
         marqueeDown: 'marquee-down 100s linear infinite',
+        copyPop: 'copyPop 0.3s ease-out',
       },
       boxShadow: {
         yellow: '0 0 60px 20px #6b6237',
@@ -155,6 +156,19 @@ module.exports = {
       },
       // that is actual animation
       keyframes: (theme) => ({
+        copyPop: {
+          '0%': {
+            opacity: 0,
+            transform: 'scale(0.5)',
+          },
+          '60%': {
+            opacity: 1,
+            transform: 'scale(1.2)',
+          },
+          '100%': {
+            transform: 'scale(1)',
+          },
+        },
         fadeOut: {
           '0%': {
             opacity: 0,

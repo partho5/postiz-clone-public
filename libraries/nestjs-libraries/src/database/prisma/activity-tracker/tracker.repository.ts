@@ -33,6 +33,32 @@ export type TrackerSessionRow = {
 // The features left out of the top features: the screens and the app going to the background or coming back.
 const HIDDEN_FEATURES = ['screen', 'app_foreground', 'app_background'];
 
+// The columns of an activity row as the log reads it. The error stack and causes are left out: the detail call loads them.
+const ACTIVITY_ROW_SELECT = {
+  id: true,
+  deviceId: true,
+  userId: true,
+  sessionKey: true,
+  seq: true,
+  kind: true,
+  name: true,
+  description: true,
+  startedAt: true,
+  endedAt: true,
+  durationMs: true,
+  tz: true,
+  appBuild: true,
+  screen: true,
+  source: true,
+  meta: true,
+  errorType: true,
+  errorMessage: true,
+  errorThread: true,
+  fatal: true,
+  lastActivity: true,
+  receivedAt: true,
+} satisfies Prisma.TrackerActivitySelect;
+
 // Reads and writes the tracker tables.
 @Injectable()
 export class TrackerRepository {
@@ -297,52 +323,30 @@ export class TrackerRepository {
     });
   }
 
-  // One device's sessions, newest first; `cursor` keeps the ones that started before it.
-  async listSessions(params: {
-    deviceId: string;
-    cursor?: Date;
+  // The activities of every device, or of one, newest first. `cursor` is the id of the last row of the page before;
+  // with `inclusive` the page starts at that row instead of after it (to open the log at one activity).
+  async listFeed(params: {
+    deviceId?: string;
+    cursor?: string;
+    inclusive: boolean;
     take: number;
   }) {
-    return this._session.model.trackerSession.findMany({
-      where: {
-        deviceId: params.deviceId,
-        ...(params.cursor ? { startedAt: { lt: params.cursor } } : {}),
-      },
-      orderBy: { startedAt: 'desc' },
+    return this._activity.model.trackerActivity.findMany({
+      where: params.deviceId ? { deviceId: params.deviceId } : {},
+      orderBy: [{ startedAt: 'desc' }, { seq: 'desc' }, { id: 'desc' }],
+      ...(params.cursor
+        ? { cursor: { id: params.cursor }, skip: params.inclusive ? 0 : 1 }
+        : {}),
       take: params.take,
+      select: ACTIVITY_ROW_SELECT,
     });
   }
 
-  // The activities of one session in replay order. The error stack and causes are left out: the detail call loads them.
-  async listTimeline(sessionKey: string, take: number) {
-    return this._activity.model.trackerActivity.findMany({
-      where: { sessionKey },
-      orderBy: [{ startedAt: 'asc' }, { seq: 'asc' }],
-      take,
-      select: {
-        id: true,
-        deviceId: true,
-        userId: true,
-        sessionKey: true,
-        seq: true,
-        kind: true,
-        name: true,
-        description: true,
-        startedAt: true,
-        endedAt: true,
-        durationMs: true,
-        tz: true,
-        appBuild: true,
-        screen: true,
-        source: true,
-        meta: true,
-        errorType: true,
-        errorMessage: true,
-        errorThread: true,
-        fatal: true,
-        lastActivity: true,
-        receivedAt: true,
-      },
+  // The email, model and OS of each of these devices, for the user line of the log.
+  async devicesByIds(deviceIds: string[]) {
+    return this._device.model.trackerDevice.findMany({
+      where: { deviceId: { in: deviceIds } },
+      select: { deviceId: true, email: true, model: true, os: true },
     });
   }
 

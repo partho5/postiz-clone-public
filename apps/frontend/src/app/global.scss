@@ -11,7 +11,8 @@
   to { transform: rotate(360deg); }
 }
 
-// Dashboard loader messages: each fades in at its start and out when the next one starts
+// Loader messages (dashboard loader, content plan waits): each fades in at its start and stays fully visible until
+// the next one starts, then crossfades out while the next fades in, so a message is always on screen.
 @keyframes boot-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -26,7 +27,8 @@
   opacity: 0;
   animation-duration: 0.3s;
   animation-timing-function: ease;
-  animation-fill-mode: backwards, forwards;
+  // boot-in holds opacity 1 after it ends (both); boot-out only takes over at its own start and holds 0 (forwards).
+  animation-fill-mode: both, forwards;
 }
 
 body {

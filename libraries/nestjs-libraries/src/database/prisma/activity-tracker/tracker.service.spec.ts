@@ -361,21 +361,65 @@ const readService = (
 };
 
 describe('api.activity-tracker: read API', () => {
-  it('gives each timeline row its gap in ms from the row before, null for the first', async () => {
-    const { service } = readService({
-      session: {
-        findUnique: jest.fn(async () => ({ key: `${DEVICE}:sess1` })),
-      },
+  it('pages the log newest first after the cursor row and gives the id of the last row as the next cursor', async () => {
+    const { service, activity } = readService({
       activity: {
         findMany: jest.fn(async () => [
-          { id: uuidOf(1), startedAt: new Date(T) },
-          { id: uuidOf(2), startedAt: new Date(T + 300) },
-          { id: uuidOf(3), startedAt: new Date(T + 3900) },
+          { id: uuidOf(3), deviceId: DEVICE },
+          { id: uuidOf(2), deviceId: DEVICE },
+          { id: uuidOf(1), deviceId: DEVICE },
         ]),
       },
     });
-    const { items } = await service.timeline(`${DEVICE}:sess1`);
-    expect(items.map((item) => item.gapMs)).toEqual([null, 300, 3600]);
+    const page = await service.feed({ cursor: uuidOf(4), limit: '2' });
+    expect(activity.findMany.mock.calls[0][0]).toMatchObject({
+      where: {},
+      orderBy: [{ startedAt: 'desc' }, { seq: 'desc' }, { id: 'desc' }],
+      cursor: { id: uuidOf(4) },
+      skip: 1,
+      take: 3,
+    });
+    expect(page.items.map((row) => row.id)).toEqual([uuidOf(3), uuidOf(2)]);
+    expect(page.nextCursor).toBe(uuidOf(2));
+  });
+
+  it('starts the log at the `at` activity itself, with no next cursor on a short page', async () => {
+    const { service, activity } = readService({
+      device: { findUnique: jest.fn(async () => ({ deviceId: DEVICE })) },
+      activity: {
+        findUnique: jest.fn(async () => ({ id: uuidOf(5), deviceId: DEVICE })),
+        findMany: jest.fn(async () => [{ id: uuidOf(5), deviceId: DEVICE }]),
+      },
+    });
+    const page = await service.feed({ deviceId: DEVICE, at: uuidOf(5) });
+    expect(activity.findMany.mock.calls[0][0]).toMatchObject({
+      where: { deviceId: DEVICE },
+      cursor: { id: uuidOf(5) },
+      skip: 0,
+    });
+    expect(page.device).toEqual({ deviceId: DEVICE });
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it.each([
+    ['unknown', null],
+    ['of another device', { id: uuidOf(5), deviceId: 'other-device' }],
+  ])('answers 404 when the `at` activity is %s', async (_, found) => {
+    const { service, activity } = readService({
+      device: { findUnique: jest.fn(async () => ({ deviceId: DEVICE })) },
+      activity: { findUnique: jest.fn(async () => found) },
+    });
+    const error = await service
+      .feed({ deviceId: DEVICE, at: uuidOf(5) })
+      .catch((err) => err);
+    expect((error as HttpException).getStatus()).toBe(404);
+    expect(activity.findMany).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for the log of an unknown device', async () => {
+    const { service } = readService();
+    const error = await service.feed({ deviceId: DEVICE }).catch((err) => err);
+    expect((error as HttpException).getStatus()).toBe(404);
   });
 
   it('reads the devices last seen before the cursor', async () => {
@@ -462,8 +506,7 @@ describe('api.activity-tracker: admin read API access', () => {
   const service = {
     overview: jest.fn(),
     devices: jest.fn(),
-    sessions: jest.fn(),
-    timeline: jest.fn(),
+    feed: jest.fn(),
     activity: jest.fn(),
   };
   const controller = new AdminTrackerController(
@@ -474,8 +517,7 @@ describe('api.activity-tracker: admin read API access', () => {
   it.each([
     ['overview', () => controller.overview(notAdmin)],
     ['devices', () => controller.devices(notAdmin)],
-    ['sessions', () => controller.sessions(notAdmin)],
-    ['timeline', () => controller.timeline(notAdmin)],
+    ['feed', () => controller.feed(notAdmin)],
     ['activity', () => controller.activity(notAdmin, uuidOf(1))],
   ])(
     'answers 403 from %s to a user who is not a super admin',

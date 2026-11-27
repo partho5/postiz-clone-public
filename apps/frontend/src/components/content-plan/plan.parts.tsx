@@ -88,6 +88,7 @@ export const PlanThinking: FC<{ kind?: 'start' | 'round' | 'proposal' | 'video' 
       t('plan_wait_start_4', 'Preparing your questions…'),
       t('plan_wait_start_5', 'Choosing recommended answers…'),
       t('plan_wait_almost', 'Almost ready…'),
+      t('plan_wait_still', 'Still working, this can take up to a minute…'),
     ],
     round: [
       t('plan_wait_round_1', 'Saving your answers…'),
@@ -95,6 +96,7 @@ export const PlanThinking: FC<{ kind?: 'start' | 'round' | 'proposal' | 'video' 
       t('plan_wait_round_3', 'Checking what is still unclear…'),
       t('plan_wait_round_4', 'Preparing the next questions…'),
       t('plan_wait_almost', 'Almost ready…'),
+      t('plan_wait_still', 'Still working, this can take up to a minute…'),
     ],
     proposal: [
       t('plan_wait_proposal_1', 'Putting your answers together…'),
@@ -102,12 +104,14 @@ export const PlanThinking: FC<{ kind?: 'start' | 'round' | 'proposal' | 'video' 
       t('plan_wait_proposal_3', 'Planning the first weeks…'),
       t('plan_wait_proposal_4', 'Writing your content plan…'),
       t('plan_wait_almost', 'Almost ready…'),
+      t('plan_wait_still', 'Still working, this can take up to a minute…'),
     ],
     video: [
       t('plan_wait_video_1', 'Reading your idea…'),
       t('plan_wait_video_2', "Checking what's unclear…"),
       t('plan_wait_video_3', 'Writing your video…'),
       t('plan_wait_almost', 'Almost ready…'),
+      t('plan_wait_still', 'Still working, this can take up to a minute…'),
     ],
   };
   const messages = kind ? lines[kind] : [t('plan_thinking', 'Thinking…')];

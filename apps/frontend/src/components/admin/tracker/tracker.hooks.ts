@@ -4,7 +4,7 @@
 import useSWR from 'swr';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 
-// One device with every column the device row holds (the sessions call answers it as `device`).
+// One device with every column the device row holds (the log of one device answers it as `device`).
 export interface TrackerDevice {
   deviceId: string;
   userId: string | null;
@@ -37,26 +37,7 @@ export type TrackerDeviceRow = Pick<
   | 'errorCount'
 >;
 
-// One app session of a device: its time span, first and last screen, entry source and counts.
-export interface TrackerSession {
-  key: string;
-  deviceId: string;
-  userId: string | null;
-  session: string;
-  startedAt: string;
-  endedAt: string;
-  entrySource: string | null;
-  firstScreen: string | null;
-  lastScreen: string | null;
-  activityCount: number;
-  errorCount: number;
-  appBuild: number | null;
-}
-
-// A session as the sessions list shows it: with its duration in ms.
-export type TrackerSessionRow = TrackerSession & { durationMs: number };
-
-// One activity or error as the timeline returns it (without the stack and causes).
+// One activity or error as the log returns it (without the stack and causes).
 export interface TrackerActivityRow {
   id: string;
   deviceId: string;
@@ -81,9 +62,6 @@ export interface TrackerActivityRow {
   lastActivity: string | null;
   receivedAt: string;
 }
-
-// One row of the timeline: the activity with the gap in ms from the one before it (null for the first).
-export type TrackerTimelineItem = TrackerActivityRow & { gapMs: number | null };
 
 // One full activity as the activity call returns it: every column, the error stack and causes included.
 export interface TrackerActivity extends TrackerActivityRow {
@@ -123,24 +101,25 @@ export interface TrackerDevicesPage {
   nextCursor: string | null;
 }
 
-// One page of a device's sessions, with the device itself.
-export interface TrackerSessionsPage {
-  device: TrackerDevice;
-  items: TrackerSessionRow[];
+// The user line of the log: a device's email, model and OS.
+export type TrackerFeedDevice = Pick<
+  TrackerDevice,
+  'deviceId' | 'email' | 'model' | 'os'
+>;
+
+// One page of the activity log, newest first, with the devices on the page and the device itself when the log is of one device.
+export interface TrackerFeedPage {
+  device: TrackerDevice | null;
+  items: TrackerActivityRow[];
+  devices: TrackerFeedDevice[];
   nextCursor: string | null;
 }
 
-// One session's activities in replay order, with the session itself.
-export interface TrackerTimelinePage {
-  session: TrackerSession;
-  items: TrackerTimelineItem[];
-}
-
-// Fetches the activity overview of the last `days` days.
-export const useTrackerOverview = (days: number) => {
+// Fetches the activity overview of the last `days` days; nothing is read while `days` is null.
+export const useTrackerOverview = (days: number | null) => {
   const fetch = useFetch();
   return useSWR<TrackerOverview>(
-    `/admin/tracker/overview?days=${days}`,
+    days === null ? null : `/admin/tracker/overview?days=${days}`,
     async (url: string) => {
       const res = await fetch(url);
       if (!res.ok) {
@@ -180,35 +159,30 @@ export const useTrackerDevices = (params: {
   );
 };
 
-// Fetches one page of a device's sessions, newest first; nothing is read while `deviceId` is null.
-export const useTrackerSessions = (deviceId: string | null, cursor?: string) => {
+// Fetches one page of the activity log, newest first: one device's when `deviceId` is set, every device's otherwise.
+// `cursor` is the page before's nextCursor; `at` starts the log at that activity.
+export const useTrackerFeed = (params: {
+  deviceId?: string;
+  cursor?: string;
+  at?: string;
+}) => {
   const fetch = useFetch();
-  const query = new URLSearchParams({ deviceId: deviceId ?? '' });
-  if (cursor) {
-    query.set('cursor', cursor);
+  const query = new URLSearchParams();
+  if (params.deviceId) {
+    query.set('deviceId', params.deviceId);
   }
-  return useSWR<TrackerSessionsPage>(
-    deviceId ? `/admin/tracker/sessions?${query.toString()}` : null,
+  if (params.cursor) {
+    query.set('cursor', params.cursor);
+  }
+  if (params.at) {
+    query.set('at', params.at);
+  }
+  return useSWR<TrackerFeedPage>(
+    `/admin/tracker/feed?${query.toString()}`,
     async (url: string) => {
       const res = await fetch(url);
       if (!res.ok) {
-        throw new Error('Failed to load sessions');
-      }
-      return res.json();
-    }
-  );
-};
-
-// Fetches one session's activities in replay order; nothing is read while `sessionKey` is null.
-export const useTrackerTimeline = (sessionKey: string | null) => {
-  const fetch = useFetch();
-  const query = new URLSearchParams({ sessionKey: sessionKey ?? '' });
-  return useSWR<TrackerTimelinePage>(
-    sessionKey ? `/admin/tracker/timeline?${query.toString()}` : null,
-    async (url: string) => {
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error('Failed to load timeline');
+        throw new Error('Failed to load activity log');
       }
       return res.json();
     }

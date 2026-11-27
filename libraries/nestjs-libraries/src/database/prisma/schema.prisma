@@ -2548,6 +2548,7 @@ model TrackerActivity {
   @@index([userId, startedAt])
   @@index([name, description])
   @@index([kind, startedAt])
+  @@index([startedAt])
   @@index([receivedAt])
 }
 

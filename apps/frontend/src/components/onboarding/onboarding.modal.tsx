@@ -13,13 +13,13 @@ import { useUser } from '@gitroom/frontend/components/layout/user.context';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import {
   AnyMcpClient,
-  CopyButton,
   getMcpConfig,
   McpAuth,
   McpClient,
   mcpClients,
 } from '@gitroom/frontend/components/public-api/public.component';
 import { McpClientIcon } from '@gitroom/frontend/components/public-api/mcp.client.icons';
+import { CopyButton } from '@gitroom/react/form/copy.button';
 
 interface OnboardingModalProps {
   onClose: () => void;

@@ -3,9 +3,9 @@
 // Scoped API keys: the Settings "API keys" card, creating a key (shown once), listing the
 // workspace's keys and revoking one.
 import { FC, useCallback, useState } from 'react';
-import copy from 'copy-to-clipboard';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { Button } from '@gitroom/react/form/button';
+import { CopyButton } from '@gitroom/react/form/copy.button';
 import { Checkbox } from '@gitroom/react/form/checkbox';
 import { Input } from '@gitroom/react/form/input';
 import { useToaster } from '@gitroom/react/toaster/toaster';
@@ -211,14 +211,7 @@ export const ApiKeysComponent: FC<{
               {createdKey}
             </pre>
             <div className="flex gap-[8px]">
-              <Button
-                onClick={() => {
-                  copy(createdKey);
-                  toaster.show(t('copied', 'Copied to clipboard'), 'success');
-                }}
-              >
-                {t('copy', 'Copy')}
-              </Button>
+              <CopyButton primary text={createdKey} />
               <Button secondary onClick={() => onCreated('')}>
                 {t('hide_key', 'Hide the key')}
               </Button>

@@ -28,9 +28,7 @@ const MAX_DAYS = 90;
 const DEFAULT_DAYS = 7;
 const MAX_LIMIT = 100;
 const DEFAULT_DEVICE_LIMIT = 50;
-const DEFAULT_SESSION_LIMIT = 30;
-// The most activities one replay returns; a longer session is cut after this many.
-const TIMELINE_MAX = 2000;
+const DEFAULT_FEED_LIMIT = 100;
 const TOP_FEATURES = 30;
 const DROP_OFF = 15;
 
@@ -304,58 +302,45 @@ export class TrackerService {
     };
   }
 
-  // One page of a device's sessions, newest first, each with its duration. Unknown device: 404.
-  async sessions(query: {
+  // One page of the activity log, newest first: every device's activities, or one device's when `deviceId` is given.
+  // `cursor` is the id of the last row of the page before; `at` starts the page at that activity (unknown, or another
+  // device's: 404). Each page carries the email, model and OS of its devices, and the device itself when `deviceId` is given (unknown device: 404).
+  async feed(query: {
     deviceId?: string;
     cursor?: string;
+    at?: string;
     limit?: string;
   }) {
-    if (!query.deviceId) {
-      throw new HttpException({ msg: 'deviceId is required' }, 400);
-    }
-    const device = await this._tracker.findDevice(query.deviceId);
-    if (!device) {
+    const device = query.deviceId
+      ? await this._tracker.findDevice(query.deviceId)
+      : null;
+    if (query.deviceId && !device) {
       throw new HttpException({ msg: 'Device not found' }, 404);
     }
-    const limit = clampLimit(query.limit, DEFAULT_SESSION_LIMIT);
-    const page = await this._tracker.listSessions({
+    // The log opens at `at` only when that activity exists (and is the device's, on a device's log).
+    const opensAt = !query.cursor && !!query.at;
+    if (opensAt) {
+      const row = await this._tracker.findActivity(query.at as string);
+      if (!row || (query.deviceId && row.deviceId !== query.deviceId)) {
+        throw new HttpException({ msg: 'Activity not found' }, 404);
+      }
+    }
+    const limit = clampLimit(query.limit, DEFAULT_FEED_LIMIT);
+    const page = await this._tracker.listFeed({
       deviceId: query.deviceId,
-      cursor: cursorOf(query.cursor),
+      cursor: query.cursor || query.at || undefined,
+      inclusive: opensAt,
       take: limit + 1,
     });
-    const items = page.slice(0, limit).map((session) => ({
-      ...session,
-      durationMs: session.endedAt.getTime() - session.startedAt.getTime(),
-    }));
+    const items = page.slice(0, limit);
+    const devices = await this._tracker.devicesByIds([
+      ...new Set(items.map((row) => row.deviceId)),
+    ]);
     return {
       device,
       items,
-      nextCursor:
-        page.length > limit
-          ? items[items.length - 1].startedAt.toISOString()
-          : null,
-    };
-  }
-
-  // One session's activities in replay order, each with the gap in ms from the one before (null for the first). Unknown session: 404.
-  async timeline(sessionKey?: string) {
-    if (!sessionKey) {
-      throw new HttpException({ msg: 'sessionKey is required' }, 400);
-    }
-    const session = await this._tracker.findSession(sessionKey);
-    if (!session) {
-      throw new HttpException({ msg: 'Session not found' }, 404);
-    }
-    const rows = await this._tracker.listTimeline(sessionKey, TIMELINE_MAX);
-    return {
-      session,
-      items: rows.map((row, i) => ({
-        ...row,
-        gapMs:
-          i === 0
-            ? null
-            : row.startedAt.getTime() - rows[i - 1].startedAt.getTime(),
-      })),
+      devices,
+      nextCursor: page.length > limit ? items[items.length - 1].id : null,
     };
   }
 

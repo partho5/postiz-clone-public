@@ -1,4 +1,4 @@
-// Activity tracker (api.activity-tracker): /admin/tracker, the super admin's read API for the Activity tab (overview, devices, replay).
+// Activity tracker (api.activity-tracker): /admin/tracker, the super admin's read API for the Activity tab (overview, devices, activity log).
 // Session auth like every /admin route. Every handler answers 403 to anyone who is not a super admin.
 import { Controller, Get, HttpException, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -39,30 +39,19 @@ export class AdminTrackerController {
     return this._trackerService.devices({ q, hasErrors, cursor, limit });
   }
 
-  // One device's sessions, newest first. `deviceId` is required.
-  @Get('/sessions')
-  async sessions(
+  // The activity log, newest first: every device, or one device with `deviceId`. `cursor` continues after a row, `at` starts at one.
+  @Get('/feed')
+  async feed(
     @GetUserFromRequest() user: User,
     @Query('deviceId') deviceId?: string,
     @Query('cursor') cursor?: string,
+    @Query('at') at?: string,
     @Query('limit') limit?: string
   ) {
     if (!user?.isSuperAdmin) {
       throw new HttpException({ msg: 'Unauthorized' }, 403);
     }
-    return this._trackerService.sessions({ deviceId, cursor, limit });
-  }
-
-  // One session's activities in replay order, with the gap to the one before. `sessionKey` is required.
-  @Get('/timeline')
-  async timeline(
-    @GetUserFromRequest() user: User,
-    @Query('sessionKey') sessionKey?: string
-  ) {
-    if (!user?.isSuperAdmin) {
-      throw new HttpException({ msg: 'Unauthorized' }, 403);
-    }
-    return this._trackerService.timeline(sessionKey);
+    return this._trackerService.feed({ deviceId, cursor, at, limit });
   }
 
   // One full activity by its id, for the error detail panel.

@@ -11,11 +11,11 @@ import {
   useState,
 } from 'react';
 import clsx from 'clsx';
-import copy from 'copy-to-clipboard';
 import { useSearchParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { Button } from '@gitroom/react/form/button';
 import { Input } from '@gitroom/react/form/input';
+import { CopyField } from '@gitroom/react/form/copy.button';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -52,6 +52,15 @@ const AppCredentialsProviderForm: FC<{
   const t = useT();
   const [values, setValues] = useState(() => initialValues(provider));
   const [busy, setBusy] = useState(false);
+  const firstField = useRef<HTMLInputElement | null>(null);
+
+  // Opening the card puts the cursor in its first key. Not on touch screens: the keyboard would
+  // cover the guide and callback URL the person reads first. No scroll, so a linked card stays put.
+  useEffect(() => {
+    if (window.matchMedia('(pointer: fine)').matches) {
+      firstField.current?.focus({ preventScroll: true });
+    }
+  }, []);
 
   // Only what changed is sent: a typed secret, or a non-secret that differs from the saved one.
   const changed = provider.fields.reduce((all, field) => {
@@ -156,20 +165,7 @@ const AppCredentialsProviderForm: FC<{
           <div className="text-[13px] font-[600]">
             {t('app_credentials_callback_url', 'Callback / redirect URL')}
           </div>
-          <div className="flex gap-[8px] items-center">
-            <div className="flex-1 bg-newBgColorInner border border-newTextColor px-[12px] py-[10px] text-[12px] break-all">
-              {provider.callbackUrl}
-            </div>
-            <Button
-              className="!bg-cyan-600"
-              onClick={() => {
-                copy(provider.callbackUrl!);
-                toaster.show(t('copied', 'Copied to clipboard'), 'success');
-              }}
-            >
-              {t('copy', 'Copy')}
-            </Button>
-          </div>
+          <CopyField text={provider.callbackUrl} />
           <div className="text-[12px] text-textItemBlur">
             {t(
               'app_credentials_callback_hint',
@@ -179,7 +175,7 @@ const AppCredentialsProviderForm: FC<{
         </div>
       )}
 
-      {provider.fields.map((field) => (
+      {provider.fields.map((field, index) => (
         <div key={field.key} className="flex flex-col gap-[4px]">
           <div className="flex items-center gap-[8px] text-[13px]">
             <span className="font-[600]">{field.label}</span>
@@ -195,6 +191,7 @@ const AppCredentialsProviderForm: FC<{
             )}
           </div>
           <Input
+            ref={index === 0 ? firstField : undefined}
             label=""
             className="!rounded-none !border-newTextColor"
             name={`app_credential_${field.key}`}
