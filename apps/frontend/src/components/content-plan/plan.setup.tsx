@@ -9,18 +9,13 @@ import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
-  PlanQuestionCard,
-  PlanQuestionValue,
-  initialQuestionValue,
-} from '@gitroom/frontend/components/content-plan/plan.question.card';
-import {
-  PLAN_OUTLINE_BUTTON,
   PLAN_PRIMARY_BUTTON,
-  PlanBackButton,
   PlanChangeNote,
   PlanFailed,
   PlanThinking,
 } from '@gitroom/frontend/components/content-plan/plan.parts';
+import { PlanRoundForm } from '@gitroom/frontend/components/content-plan/plan.round.form';
+import { PlanStepNav } from '@gitroom/frontend/components/content-plan/plan.steps';
 import { usePlanRequest } from '@gitroom/frontend/components/content-plan/use.plan.request';
 import { CONTENT_PLAN_KEY } from '@gitroom/frontend/components/content-plan/use.content.plan';
 import {
@@ -31,68 +26,6 @@ import {
   PlanView,
   VIDEOS_PER_WEEK,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
-
-// Where a step can go: back to the step before it, and on to the step after it when there is one already.
-export interface PlanStepNav {
-  back?: () => void;
-  next?: () => void;
-}
-
-// The answers of a round as the server takes them: a question the owner left empty is left out. A question that takes
-// one option sends it as `optionId`, one that takes several sends `optionIds`.
-const answersOf = (
-  round: PlanRoundView,
-  values: Record<string, PlanQuestionValue>
-): PlanAnswer[] =>
-  round.questions.flatMap((question) => {
-    const value = values[question.id] ?? initialQuestionValue(question);
-    const other = value.other.trim();
-    return value.optionIds.length || other
-      ? [
-          {
-            questionId: question.id,
-            optionId: question.multiple ? null : value.optionIds[0] ?? null,
-            optionIds: question.multiple ? value.optionIds : [],
-            other: other || null,
-          },
-        ]
-      : [];
-  });
-
-// What the owner chose on a round, as the form holds it: the saved answers, or for a round not answered yet the
-// recommended options.
-const valuesOf = (round: PlanRoundView) =>
-  Object.fromEntries(
-    round.questions.map((question): [string, PlanQuestionValue] => {
-      if (!round.answers) {
-        return [question.id, initialQuestionValue(question)];
-      }
-      const saved = round.answers.find((answer) => answer.questionId === question.id);
-      return [
-        question.id,
-        {
-          optionIds: saved?.optionIds?.length
-            ? saved.optionIds
-            : saved?.optionId
-            ? [saved.optionId]
-            : [],
-          other: saved?.other ?? '',
-        },
-      ];
-    })
-  );
-
-// The choices of a round in one comparable text, so "did the owner change anything" is a string comparison.
-const choicesKey = (
-  round: PlanRoundView,
-  values: Record<string, PlanQuestionValue>
-) =>
-  JSON.stringify(
-    round.questions.map((question) => {
-      const value = values[question.id] ?? { optionIds: [], other: '' };
-      return [question.id, [...value.optionIds].sort(), value.other.trim()];
-    })
-  );
 
 // The first step: one big text about the business, and the button that starts the questions. Gone back to, it shows the
 // text and goes on without asking again when nothing changed.
@@ -170,9 +103,8 @@ export const PlanStartStep: FC<{ plan: PlanView; nav: PlanStepNav }> = ({
   );
 };
 
-// One round: what the AI understood, its questions, the videos per week (on the last round), and the ways on. A round
-// gone back to shows its saved answers; "Continue" goes on to the next step as it is, unless the owner changed
-// something, which asks the AI again from this round.
+// One round: what the AI understood, its questions, the videos per week (on the last round), and the ways on. The round
+// itself is the shared `PlanRoundForm`; this adds what only the setup has: the videos per week and the calls it makes.
 export const PlanRoundStep: FC<{
   plan: PlanView;
   round: PlanRoundView;
@@ -182,157 +114,101 @@ export const PlanRoundStep: FC<{
   const { send, pending } = usePlanRequest();
   const { mutate } = useSWRConfig();
   const isLatest = round.id === plan.round?.id;
-  const [direction, setDirection] = useState(round.direction);
   const [videosPerWeek, setVideosPerWeek] = useState<number>(
     plan.videosPerWeek || DEFAULT_VIDEOS_PER_WEEK
-  );
-  const [values, setValues] = useState<Record<string, PlanQuestionValue>>(() =>
-    valuesOf(round)
   );
   const [writingPlan, setWritingPlan] = useState(false);
   const working = pending || !!plan.busy;
   const disabled = working || !plan.canEdit;
-  const planFirst = isLatest && (round.readyForPlan || !round.questions.length);
-  // the answers or the text changed (the next questions change), or only the videos per week (only the plan changes)
-  const changed =
-    direction.trim() !== round.direction.trim() ||
-    choicesKey(round, values) !== choicesKey(round, valuesOf(round));
-  const planChanged =
-    changed || (isLatest && videosPerWeek !== plan.videosPerWeek);
 
-  const next = useCallback(async () => {
-    setWritingPlan(false);
-    if (
-      !(await send('POST', '/content-plan/setup/answer', {
-        roundId: round.id,
-        direction: direction.trim(),
-        answers: answersOf(round, values),
-      }))
-    ) {
-      await mutate(CONTENT_PLAN_KEY);
-    }
-  }, [direction, mutate, round, send, values]);
+  const next = useCallback(
+    async (direction: string, answers: PlanAnswer[]) => {
+      setWritingPlan(false);
+      if (
+        !(await send('POST', '/content-plan/setup/answer', {
+          roundId: round.id,
+          direction,
+          answers,
+        }))
+      ) {
+        await mutate(CONTENT_PLAN_KEY);
+      }
+    },
+    [mutate, round.id, send]
+  );
 
-  const showPlan = useCallback(async () => {
-    setWritingPlan(true);
-    const answer = await send('POST', '/content-plan/proposal', {
-      direction: direction.trim(),
-      videosPerWeek,
-      answers: answersOf(round, values),
-    });
-    if (answer) {
-      nav.next?.();
-    }
-  }, [direction, nav, round, send, values, videosPerWeek]);
-
-  // Nothing changed and the next step exists: go on to it as it is.
-  const goOn = !changed && nav.next ? nav.next : next;
-  const planReady = !planChanged && !!nav.next && isLatest ? nav.next : showPlan;
-  const note =
-    planChanged && nav.next
-      ? isLatest
-        ? t('plan_change_plan', 'If you change this, your plan will change.')
-        : t(
-            'plan_change_next_questions',
-            'If you change this, the next questions will change.'
-          )
-      : null;
+  const showPlan = useCallback(
+    async (direction: string, answers: PlanAnswer[]) => {
+      setWritingPlan(true);
+      const answer = await send('POST', '/content-plan/proposal', {
+        direction,
+        videosPerWeek,
+        answers,
+      });
+      if (answer) {
+        nav.next?.();
+      }
+    },
+    [nav, send, videosPerWeek]
+  );
 
   return (
-    <div className="flex flex-col gap-[24px]">
-      {plan.notice === 'proposal_failed' && isLatest && (
-        <PlanFailed
-          text={t(
-            'plan_proposal_failed',
-            'The plan could not be written. Please try again.'
-          )}
-        />
-      )}
-      <div className="flex flex-col gap-[4px]">
-        <Textarea
-          label={t('plan_understood', "Here's what I understood")}
-          name={`planDirection${round.index}`}
-          disableForm={true}
-          disabled={disabled}
-          dir="auto"
-          value={direction}
-          maxLength={LIMITS.direction}
-          className="min-h-[220px] w-full"
-          onChange={(event) => setDirection(event.target.value)}
-        />
-        <div className="text-newTextColor/60 text-[15px]">
-          {t('plan_understood_note', "Edit anything that's not right")}
-        </div>
-      </div>
-
-      {round.questions.map((question) => (
-        <PlanQuestionCard
-          key={question.id}
-          question={question}
-          value={values[question.id] ?? initialQuestionValue(question)}
-          disabled={disabled}
-          onChange={(value) =>
-            setValues((held) => ({ ...held, [question.id]: value }))
-          }
-        />
-      ))}
-
-      {isLatest && (
-        <div className="flex flex-col gap-[6px]">
-          <div className="text-[17px] font-[600]">
-            {t('plan_videos_per_week', 'Videos per week')}
-          </div>
-          <select
-            value={videosPerWeek}
-            disabled={disabled}
-            aria-label={t('plan_videos_per_week', 'Videos per week')}
-            onChange={(event) => setVideosPerWeek(Number(event.target.value))}
-            className="bg-newBgColorInner h-[56px] border-2 border-newTextColor/15 rounded-[14px] px-[14px] text-[17px] text-textColor w-full sm:w-[160px] focus:border-btnPrimary outline-none"
-          >
-            {VIDEOS_PER_WEEK.map((count) => (
-              <option key={count} value={count}>
-                {count}
-              </option>
-            ))}
-          </select>
-          <div className="text-newTextColor/60 text-[15px]">
-            {t(
-              'plan_videos_per_week_help',
-              'How many videos can you make a week? You can change this later; it applies from the next week.'
+    <PlanRoundForm
+      round={round}
+      summary={round.direction}
+      summaryName={`planDirection${round.index}`}
+      summaryMax={LIMITS.direction}
+      resultLabel={t('plan_show_plan', 'Show me the plan')}
+      isLatest={isLatest}
+      canEdit={plan.canEdit}
+      busy={working}
+      nav={nav}
+      onContinue={next}
+      onResult={showPlan}
+      extrasChanged={videosPerWeek !== plan.videosPerWeek}
+      failure={
+        plan.notice === 'proposal_failed' && isLatest ? (
+          <PlanFailed
+            text={t(
+              'plan_proposal_failed',
+              'The plan could not be written. Please try again.'
             )}
+          />
+        ) : null
+      }
+      extras={
+        isLatest && (
+          <div className="flex flex-col gap-[6px]">
+            <div className="text-[17px] font-[600]">
+              {t('plan_videos_per_week', 'Videos per week')}
+            </div>
+            <select
+              value={videosPerWeek}
+              disabled={disabled}
+              aria-label={t('plan_videos_per_week', 'Videos per week')}
+              onChange={(event) => setVideosPerWeek(Number(event.target.value))}
+              className="bg-newBgColorInner h-[56px] border-2 border-newTextColor/15 rounded-[14px] px-[14px] text-[17px] text-textColor w-full sm:w-[160px] focus:border-btnPrimary outline-none"
+            >
+              {VIDEOS_PER_WEEK.map((count) => (
+                <option key={count} value={count}>
+                  {count}
+                </option>
+              ))}
+            </select>
+            <div className="text-newTextColor/60 text-[15px]">
+              {t(
+                'plan_videos_per_week_help',
+                'How many videos can you make a week? You can change this later; it applies from the next week.'
+              )}
+            </div>
           </div>
-        </div>
-      )}
-
-      {note && <PlanChangeNote text={note} />}
-      {working && (
+        )
+      }
+      thinking={
         <PlanThinking
           kind={writingPlan || plan.busy === 'proposal' ? 'proposal' : 'round'}
         />
-      )}
-      {plan.canEdit && !working && (
-        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-[12px]">
-          {nav.back ? <PlanBackButton onClick={nav.back} /> : <span />}
-          <div className="flex flex-col sm:flex-row gap-[12px]">
-            <Button
-              disabled={!direction.trim()}
-              onClick={goOn}
-              className={planFirst ? PLAN_OUTLINE_BUTTON : PLAN_PRIMARY_BUTTON}
-            >
-              {t('plan_continue', 'Continue')}
-            </Button>
-            {isLatest && (
-              <Button
-                disabled={!direction.trim()}
-                onClick={planReady}
-                className={planFirst ? PLAN_PRIMARY_BUTTON : PLAN_OUTLINE_BUTTON}
-              >
-                {t('plan_show_plan', 'Show me the plan')}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      }
+    />
   );
 };

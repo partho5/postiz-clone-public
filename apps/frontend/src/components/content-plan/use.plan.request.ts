@@ -59,6 +59,8 @@ export const usePlanRequest = () => {
         case 'PLAN_NOT_ACTIVE':
         case 'WEEK_NOT_FOUND':
         case 'DAY_NOT_FOUND':
+        case 'SESSION_CLOSED':
+        case 'SESSION_NOT_FOUND':
           return t(
             'plan_error_stale',
             'The plan changed in the meantime. It has been refreshed.'
