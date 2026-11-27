@@ -255,22 +255,32 @@ const PlanInstantModal: FC<{ today: string; close: () => void }> = ({
             );
           }
           if (step.key === VIDEO_STEP) {
-            return live.status === 'PROPOSED' && proposal ? (
-              <PlanInstantResult
-                key={live.proposalVersion}
-                videos={proposal.videos}
-                today={today}
-                canEdit={live.canEdit}
-                busy={busy}
-                failed={live.notice === 'proposal_failed'}
-                onRetry={
-                  lastFeedback.current
-                    ? () => revise(lastFeedback.current)
-                    : undefined
-                }
-                onRevise={revise}
-                onConfirm={confirm}
-              />
+            // a revision keeps the last proposal on screen, dimmed and locked (busy), under the waiting line
+            const revising = live.status === 'PROPOSING' && !!proposal;
+            return (live.status === 'PROPOSED' || revising) && proposal ? (
+              <div className="flex flex-col gap-[16px]">
+                {revising && <PlanThinking kind="video" />}
+                <div
+                  aria-busy={revising}
+                  className={revising ? 'opacity-50' : undefined}
+                >
+                  <PlanInstantResult
+                    key={live.proposalVersion}
+                    videos={proposal.videos}
+                    today={today}
+                    canEdit={live.canEdit}
+                    busy={busy}
+                    failed={live.notice === 'proposal_failed'}
+                    onRetry={
+                      lastFeedback.current
+                        ? () => revise(lastFeedback.current)
+                        : undefined
+                    }
+                    onRevise={revise}
+                    onConfirm={confirm}
+                  />
+                </div>
+              </div>
             ) : (
               <PlanThinking kind="video" />
             );

@@ -414,7 +414,9 @@ export class ContentPlanSessionService {
     );
   }
 
-  // The session as the page draws it.
+  // The session as the page draws it. The proposal is shown while it is PROPOSED, and also while a revision of it is being
+  // written (PROPOSING with a stored proposal), so the owner keeps seeing the one they asked to change; a first proposal
+  // has none yet, and a finished or discarded session shows none.
   private async viewOf(
     org: PlanOrganization,
     session: PlanSession
@@ -445,7 +447,7 @@ export class ContentPlanSessionService {
       rounds: views,
       proposalVersion: session.proposalVersion,
       proposal:
-        session.status === 'PROPOSED' && session.proposal
+        ['PROPOSED', 'PROPOSING'].includes(session.status) && session.proposal
           ? kind.viewOf(session.proposal)
           : null,
     };

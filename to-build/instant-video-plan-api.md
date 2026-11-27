@@ -15,7 +15,9 @@ Every route below is under `/content-plan`. Any member may read; the other route
 ```
 - `PlanSessionRoundView` is `{ id, index, summary, questions: PlanQuestion[], answers: PlanAnswer[]|null, readyForPlan }`.
 - `PlanQuestion` is `{ id, text, options: {id, label}[], recommendedOptionId, multiple?, recommendedOptionIds? }`.
-- `proposal` is set only while the status is PROPOSED, with the videos in date order.
+- `proposal` is set while the status is PROPOSED, and also while a revise is being written (PROPOSING with a stored
+  proposal; `proposalVersion` is unchanged until the new one is saved), with the videos in date order. A first proposal has
+  none yet, and a DONE or DISCARDED session shows none.
 
 ## Routes
 | Route | Request | Response |

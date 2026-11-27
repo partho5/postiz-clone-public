@@ -54,10 +54,22 @@ const PlanFactsText: FC<{ facts: PlanFacts }> = ({ facts }) => {
   return (
     <div className="flex flex-col gap-[10px]">
       <Fact label={t('plan_fact_what', 'What you do')} value={facts.whatWeDo} />
-      <Fact label={t('plan_fact_audience', 'Who it is for')} value={facts.audience} />
-      <Fact label={t('plan_fact_problems', 'Problems you solve')} value={facts.problems} />
-      <Fact label={t('plan_fact_solution', 'How you solve them')} value={facts.solution} />
-      <Fact label={t('plan_fact_objections', 'What people worry about')} value={facts.objections} />
+      <Fact
+        label={t('plan_fact_audience', 'Who it is for')}
+        value={facts.audience}
+      />
+      <Fact
+        label={t('plan_fact_problems', 'Problems you solve')}
+        value={facts.problems}
+      />
+      <Fact
+        label={t('plan_fact_solution', 'How you solve them')}
+        value={facts.solution}
+      />
+      <Fact
+        label={t('plan_fact_objections', 'What people worry about')}
+        value={facts.objections}
+      />
       <Fact label={t('plan_fact_tone', 'Tone')} value={facts.tone} />
       <Fact
         label={t('plan_fact_length', 'Video length')}
@@ -71,9 +83,13 @@ const PlanFactsText: FC<{ facts: PlanFacts }> = ({ facts }) => {
 };
 
 // One of the first weeks in full: its dates, its idea and one title with an angle chip per video.
-const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({ week }) => (
+const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({
+  week,
+}) => (
   <div className="flex flex-col gap-[8px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
-    <div className="text-newTextColor/60 text-[15px]">{planWeekRange(week.weekStart)}</div>
+    <div className="text-newTextColor/60 text-[15px]">
+      {planWeekRange(week.weekStart)}
+    </div>
     <div dir="auto" className="font-[600] break-words">
       {week.idea}
     </div>
@@ -92,11 +108,12 @@ const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({ week }) => 
   </div>
 );
 
-// The proposal page. A plan that is being written again shows "Thinking…" in place of the proposal.
-export const PlanPreview: FC<{ session: PlanSessionView; onBack?: () => void }> = ({
-  session,
-  onBack,
-}) => {
+// The proposal page. A plan that is being written again keeps the last proposal on screen, dimmed and locked, under the
+// "Thinking…" line; a first proposal shows only the line.
+export const PlanPreview: FC<{
+  session: PlanSessionView;
+  onBack?: () => void;
+}> = ({ session, onBack }) => {
   const t = useT();
   const { act, pending } = usePlanSessionRequest();
   const { mutate } = useSWRConfig();
@@ -106,7 +123,8 @@ export const PlanPreview: FC<{ session: PlanSessionView; onBack?: () => void }> 
   const videosPerWeek =
     (session.options as Partial<PlanSetupOptions> | null)?.videosPerWeek ??
     DEFAULT_VIDEOS_PER_WEEK;
-  const working = pending || !!session.busy || session.status === 'PROPOSING';
+  const revising = session.status === 'PROPOSING';
+  const working = pending || !!session.busy || revising;
   const canEdit = session.canEdit;
 
   const confirm = useCallback(async () => {
@@ -145,138 +163,148 @@ export const PlanPreview: FC<{ session: PlanSessionView; onBack?: () => void }> 
 
   return (
     <div className="flex flex-col gap-[16px]">
-      <PlanSection title={t('plan_understood', "Here's what I understood")}>
-        <div dir="auto" className="whitespace-pre-line break-words">
-          {session.summary}
-        </div>
-        <div className="text-newTextColor/70">
-          {t('plan_videos_a_week', {
-            defaultValue: '{{videos}} videos a week',
-            videos: videosPerWeek,
-          })}
-        </div>
-      </PlanSection>
+      {revising && <PlanThinking kind="proposal" />}
+      <div
+        aria-busy={revising}
+        className={
+          revising
+            ? 'flex flex-col gap-[16px] opacity-50'
+            : 'flex flex-col gap-[16px]'
+        }
+      >
+        <PlanSection title={t('plan_understood', "Here's what I understood")}>
+          <div dir="auto" className="whitespace-pre-line break-words">
+            {session.summary}
+          </div>
+          <div className="text-newTextColor/70">
+            {t('plan_videos_a_week', {
+              defaultValue: '{{videos}} videos a week',
+              videos: videosPerWeek,
+            })}
+          </div>
+        </PlanSection>
 
-      <PlanSection title={t('plan_about_business', 'About your business')}>
-        <PlanFactsText facts={proposal.facts} />
-      </PlanSection>
+        <PlanSection title={t('plan_about_business', 'About your business')}>
+          <PlanFactsText facts={proposal.facts} />
+        </PlanSection>
 
-      <PlanSection title={t('plan_themes', 'Themes')}>
-        <div className="flex flex-wrap gap-[8px]">
-          {proposal.themes.map((theme) => (
-            <span
-              key={theme.ref}
-              dir="auto"
-              title={theme.description}
-              className="inline-flex items-center rounded-full border border-newTextColor/20 px-[12px] py-[4px] break-words"
-            >
-              {theme.name}
-            </span>
+        <PlanSection title={t('plan_themes', 'Themes')}>
+          <div className="flex flex-wrap gap-[8px]">
+            {proposal.themes.map((theme) => (
+              <span
+                key={theme.ref}
+                dir="auto"
+                title={theme.description}
+                className="inline-flex items-center rounded-full border border-newTextColor/20 px-[12px] py-[4px] break-words"
+              >
+                {theme.name}
+              </span>
+            ))}
+          </div>
+        </PlanSection>
+
+        <div className="flex flex-col gap-[12px]">
+          {previewWeeks.map((week) => (
+            <PlanWeekCard key={week.weekStart} week={week} />
           ))}
         </div>
-      </PlanSection>
 
-      <div className="flex flex-col gap-[12px]">
-        {previewWeeks.map((week) => (
-          <PlanWeekCard key={week.weekStart} week={week} />
-        ))}
-      </div>
+        {!!laterWeeks.length && (
+          <details className="bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
+            <summary className="cursor-pointer font-[600]">
+              {t('plan_later_weeks', {
+                defaultValue: 'Weeks {{from}}-{{to}}',
+                from: PREVIEW_WEEKS + 1,
+                to: proposal.weeks.length,
+              })}
+            </summary>
+            <ul className="flex flex-col gap-[10px] mt-[10px]">
+              {laterWeeks.map((week) => (
+                <li key={week.weekStart} className="flex flex-col">
+                  <span className="text-newTextColor/60 text-[15px]">
+                    {planWeekRange(week.weekStart)}
+                  </span>
+                  <span dir="auto" className="break-words">
+                    {week.idea}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
 
-      {!!laterWeeks.length && (
-        <details className="bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
-          <summary className="cursor-pointer font-[600]">
-            {t('plan_later_weeks', {
-              defaultValue: 'Weeks {{from}}-{{to}}',
-              from: PREVIEW_WEEKS + 1,
-              to: proposal.weeks.length,
-            })}
-          </summary>
-          <ul className="flex flex-col gap-[10px] mt-[10px]">
-            {laterWeeks.map((week) => (
-              <li key={week.weekStart} className="flex flex-col">
-                <span className="text-newTextColor/60 text-[15px]">
-                  {planWeekRange(week.weekStart)}
-                </span>
-                <span dir="auto" className="break-words">
-                  {week.idea}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      {working && <PlanThinking kind="proposal" />}
-      {failed && !working && (
-        <PlanFailed
-          text={t(
-            'plan_proposal_failed',
-            'The plan could not be written. Please try again.'
-          )}
-          loading={pending}
-          onRetry={
-            canEdit
-              ? feedback.trim()
-                ? revise
-                : () => setAsking(true)
-              : undefined
-          }
-        />
-      )}
-
-      {canEdit && (
-        <div className="flex flex-col gap-[12px]">
-          {asking && (
-            <>
-              <Textarea
-                label={t('plan_whats_wrong', "What's not right?")}
-                name="planFeedback"
-                disableForm={true}
-                disabled={working}
-                dir="auto"
-                value={feedback}
-                maxLength={LIMITS.feedback}
-                className="min-h-[120px] w-full"
-                onChange={(event) => setFeedback(event.target.value)}
-              />
-              <div className="flex">
-                <Button
-                  disabled={working || !feedback.trim()}
-                  onClick={revise}
-                  className={PLAN_PRIMARY_BUTTON}
-                >
-                  {t('plan_revise', 'Write it again')}
-                </Button>
-              </div>
-            </>
-          )}
-          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-[12px]">
-            {onBack ? (
-              <PlanBackButton onClick={onBack} disabled={working} />
-            ) : (
-              <span />
+        {working && !revising && <PlanThinking kind="proposal" />}
+        {failed && !working && (
+          <PlanFailed
+            text={t(
+              'plan_proposal_failed',
+              'The plan could not be written. Please try again.'
             )}
-            <div className="flex flex-col sm:flex-row gap-[12px]">
-              {!asking && (
+            loading={pending}
+            onRetry={
+              canEdit
+                ? feedback.trim()
+                  ? revise
+                  : () => setAsking(true)
+                : undefined
+            }
+          />
+        )}
+
+        {canEdit && (
+          <div className="flex flex-col gap-[12px]">
+            {asking && (
+              <>
+                <Textarea
+                  label={t('plan_whats_wrong', "What's not right?")}
+                  name="planFeedback"
+                  disableForm={true}
+                  disabled={working}
+                  dir="auto"
+                  value={feedback}
+                  maxLength={LIMITS.feedback}
+                  className="min-h-[120px] w-full"
+                  onChange={(event) => setFeedback(event.target.value)}
+                />
+                <div className="flex">
+                  <Button
+                    disabled={working || !feedback.trim()}
+                    onClick={revise}
+                    className={PLAN_PRIMARY_BUTTON}
+                  >
+                    {t('plan_revise', 'Write it again')}
+                  </Button>
+                </div>
+              </>
+            )}
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-[12px]">
+              {onBack ? (
+                <PlanBackButton onClick={onBack} disabled={working} />
+              ) : (
+                <span />
+              )}
+              <div className="flex flex-col sm:flex-row gap-[12px]">
+                {!asking && (
+                  <Button
+                    disabled={working}
+                    onClick={() => setAsking(true)}
+                    className={PLAN_OUTLINE_BUTTON}
+                  >
+                    {t('plan_not_right', "Something's not right")}
+                  </Button>
+                )}
                 <Button
                   disabled={working}
-                  onClick={() => setAsking(true)}
-                  className={PLAN_OUTLINE_BUTTON}
+                  onClick={confirm}
+                  className={PLAN_PRIMARY_BUTTON}
                 >
-                  {t('plan_not_right', "Something's not right")}
+                  {t('plan_confirm', 'Confirm plan')}
                 </Button>
-              )}
-              <Button
-                disabled={working}
-                onClick={confirm}
-                className={PLAN_PRIMARY_BUTTON}
-              >
-                {t('plan_confirm', 'Confirm plan')}
-              </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

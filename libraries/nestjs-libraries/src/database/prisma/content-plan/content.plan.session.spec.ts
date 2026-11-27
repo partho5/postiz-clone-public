@@ -652,7 +652,8 @@ describe('ContentPlanSessionService revise', () => {
     });
     expect(view.status).toBe('PROPOSING');
     expect(view.busy).toBe('proposal');
-    expect(view.proposal).toBeNull();
+    expect(view.proposalVersion).toBe(1);
+    expect(view.proposal).toEqual({ shown: ['We bake sourdough', null] });
     const [, options] = ctx.start.mock.calls[1];
     expect(options.workflowId).toBe('content_plan_session_revise_session-1');
     expect(options.args).toEqual([
@@ -671,6 +672,19 @@ describe('ContentPlanSessionService revise', () => {
       content: stableJson({ feedback: 'Make it shorter' }),
     });
     expect(row.proposalTurns[3].content).toBe('{"raw":"proposal 2"}');
+  });
+
+  it('shows the last proposal while a revision is written, none for a first proposal, and none once discarded', async () => {
+    const ctx = await withProposal(build());
+    await ctx.service.revise(org(), 'session-1', { proposalVersion: 1, feedback: 'Make it shorter' });
+    const revising = await ctx.service.view(org(), 'session-1');
+    expect(revising).toMatchObject({ status: 'PROPOSING', proposalVersion: 1 });
+    expect(revising.proposal).toEqual({ shown: ['We bake for locals', null] });
+    const first = await withRound(build());
+    await first.service.propose(org(), 'session-1', { summary: 'We bake for locals' });
+    expect((await first.service.view(org(), 'session-1')).proposal).toBeNull();
+    await ctx.service.discard(org(), 'session-1');
+    expect((await ctx.service.view(org(), 'session-1')).proposal).toBeNull();
   });
 });
 
