@@ -141,7 +141,7 @@ Verification is deferred by the owner (2026-11-27): coders only for now, and eve
 | IV5 | done, awaiting verify | web c46364c0 | |
 | IV6 | done, awaiting verify | FaceCam b85b2fe | |
 | IV7 | done, awaiting verify | FaceCam eb8563f | |
-| IV8 | done, awaiting verify | web 312368b9 | |
+| IV8 | done, awaiting verify | web 312368b9 + 7593ffc5 (revise keeps proposal) | |
 
 ## Later cleanup (after IV8 is verified and has been live for a deploy or two)
 IV8 moved the plan setup onto the engine and stopped writing the old setup storage, but dropped nothing, so an older
