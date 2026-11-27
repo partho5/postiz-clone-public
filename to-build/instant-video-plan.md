@@ -121,3 +121,24 @@ engine is generic, so one video, a set of videos, or a future feature runs the s
 - Write a migration that moves in-progress setups (`ContentPlanRound` → `PlanSessionRound`).
 - The wizard uses the shared pieces, and the old round code is removed.
 - Existing confirmed plans are untouched.
+
+## Shared contract (fixed so the web and phone lanes can run in parallel)
+`GET /public/v1/content-plan/week/stamp`: same guard, auth and workspace as `GET /public/v1/content-plan/week`. It
+answers `200 {"stamp": "<opaque string>"}`, and the stamp changes whenever anything `/week` returns changes: the week,
+its days, instant ideas in it, recorded marks, or today's date for the brand. With no active plan or week, it still
+answers 200 with a stable stamp.
+
+## Progress (runner)
+Branches: web `feat/instant-video-plan`; FaceCam `feat/instant-video-plan`. Coders and verifiers: Sonnet sub agents,
+high effort.
+
+| Card | Status | Commit | Verified |
+|---|---|---|---|
+| IV1 | in progress | | |
+| IV2 | todo | | |
+| IV3 | todo | | |
+| IV4 | todo | | |
+| IV5 | todo | | |
+| IV6 | in progress | | |
+| IV7 | todo | | |
+| IV8 | todo | | |
