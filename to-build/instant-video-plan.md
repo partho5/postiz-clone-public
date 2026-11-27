@@ -135,7 +135,7 @@ Verification is deferred by the owner (2026-11-27): coders only for now, and eve
 | Card | Status | Commit | Verified |
 |---|---|---|---|
 | IV1 | done, awaiting verify | web b446a175 | |
-| IV2 | in progress | | |
+| IV2 | done, awaiting verify | web 60731462 | |
 | IV3 | todo | | |
 | IV4 | todo | | |
 | IV5 | todo | | |
