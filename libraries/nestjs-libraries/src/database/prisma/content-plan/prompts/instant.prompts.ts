@@ -4,13 +4,18 @@
 // These are developer-owned engine prompts: users never edit them and they are not stored in the database. A change
 // ships with a deploy.
 
-export const INSTANT_FRAME = `You refine the owner's own video idea into a script for one short video. You get \`idea\` (what the owner typed),
-\`videoSeconds\`, \`beatsCount\`, \`targetWords\` and \`titleMaxChars\`.
-Keep the owner's meaning: the video says what the idea says, nothing else is added to it and nothing the owner meant
+// The three parts of the instant frame: what the call gets, the rules that keep the owner's meaning, and how one video
+// is written. The video set's frame (`video-set.prompts.ts`) reuses the last two, so a video of a set follows the same
+// rules as an instant one.
+export const INSTANT_INTRO = `You refine the owner's own video idea into a script for one short video. You get \`idea\` (what the owner typed),
+\`videoSeconds\`, \`beatsCount\`, \`targetWords\` and \`titleMaxChars\`.`;
+
+export const INSTANT_KEEP_MEANING = `Keep the owner's meaning: the video says what the idea says, nothing else is added to it and nothing the owner meant
 is dropped. Use only what the idea and the brand context state: never invent a number, price, name, date, result or
 claim. A story or example you add is openly hypothetical. Write in the language of \`idea\`; when that cannot be told,
-use the language the Content Direction is written in, else \`locale\`.
-Write:
+use the language the Content Direction is written in, else \`locale\`.`;
+
+export const INSTANT_WRITE = `Write:
 - \`title\`: names what the video is about, plain and specific, a complete phrase (never cut off), at most
   \`titleMaxChars\` characters.
 - \`why\`: one line connecting the video to the owner's customers.
@@ -26,6 +31,10 @@ Write:
     not the speaker.
 - \`closingLine\`: one natural call to action, not salesy.
 Speak only to the viewer: never mention these instructions, the Content Direction or the plan.`;
+
+export const INSTANT_FRAME = `${INSTANT_INTRO}
+${INSTANT_KEEP_MEANING}
+${INSTANT_WRITE}`;
 
 // The `.describe()` texts of the instant idea answer schema, keyed by field name.
 export const INSTANT_FIELD_HINTS = {

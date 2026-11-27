@@ -2,9 +2,11 @@
 // confirm) what a kind of work (a set of videos, a future feature) is made of. One implementation of `PlanSessionKind`
 // per kind, registered by its `kind` string; the generic service looks it up and never names a kind.
 import { Injectable } from '@nestjs/common';
-import { PlanSession, Prisma } from '@prisma/client';
+import { ContentPlan, PlanSession, Prisma } from '@prisma/client';
 import { ChatTurn } from '@gitroom/nestjs-libraries/muse/muse.chat.service';
 import { PlannerPromptKey } from '@gitroom/nestjs-libraries/database/prisma/content-plan/prompts';
+import { RoundFieldHints } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.generator';
+import { PlanOrganization } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
 
 // A session with the brand columns the AI calls and the confirmation are made from.
 export type PlanSessionForWrite = PlanSession & {
@@ -31,8 +33,22 @@ export interface PlanSessionKind {
   kind: string;
   // The prompt key of the frame the question rounds are written on.
   roundFrame: PlannerPromptKey;
-  // The kind's start options as they are stored; throws InvalidPlanException when they are not valid.
-  parseOptions(options: unknown): Prisma.InputJsonObject;
+  // The field hints of the rounds' answer schema, when the kind words them itself; the setup's when it has none.
+  roundHints?: RoundFieldHints;
+  // The action the proposal and the revise are charged on.
+  proposalAction: string;
+  // The plan the session belongs to: the one the setup makes, or the running plan a kind works inside (the kind refuses
+  // when the workspace has none, so no plan row is made for it).
+  planOf(org: PlanOrganization): Promise<ContentPlan>;
+  // The kind's start options as they are stored, checked against the workspace and its plan; throws
+  // InvalidPlanException when they are not valid.
+  parseOptions(
+    options: unknown,
+    org: PlanOrganization,
+    plan: ContentPlan
+  ): Prisma.InputJsonObject | Promise<Prisma.InputJsonObject>;
+  // What the kind adds to the first turn of the rounds, next to the owner's first text, from the stored options.
+  openingOf?(options: Prisma.InputJsonObject): Record<string, unknown>;
   // Writes the proposal from the session (its summary, options and answers). `turns` is the earlier proposal chat (empty
   // for the first proposal); `feedback` is the owner's words of a revise, else null. Failures are thrown.
   buildProposal(

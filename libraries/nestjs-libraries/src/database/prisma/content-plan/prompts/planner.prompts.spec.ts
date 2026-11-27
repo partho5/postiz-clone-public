@@ -15,6 +15,8 @@ const KEYS: PlannerPromptKey[] = [
   'planner.frame.week',
   'planner.frame.day',
   'planner.frame.instant',
+  'planner.frame.video_set_round',
+  'planner.frame.video_set',
 ];
 
 describe('content plan prompts', () => {
@@ -28,9 +30,12 @@ describe('content plan prompts', () => {
     }
   });
 
-  it('runs the setup on low effort and every other prompt on medium', () => {
-    expect(PLANNER_PROMPTS['planner.frame.setup'].effort).toBe('low');
-    for (const key of KEYS.filter((k) => k !== 'planner.frame.setup')) {
+  it('runs the question rounds (setup and video set) on low effort and every other prompt on medium', () => {
+    const rounds = ['planner.frame.setup', 'planner.frame.video_set_round'];
+    for (const key of rounds) {
+      expect(PLANNER_PROMPTS[key as PlannerPromptKey].effort).toBe('low');
+    }
+    for (const key of KEYS.filter((k) => !rounds.includes(k))) {
       expect(PLANNER_PROMPTS[key].effort).toBe('medium');
     }
   });

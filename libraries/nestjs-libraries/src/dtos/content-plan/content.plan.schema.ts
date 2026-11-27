@@ -251,6 +251,28 @@ export interface PlanSessionView {
   proposalVersion: number;
   proposal: unknown | null;
 }
+// The most videos one video-set session writes.
+export const MAX_VIDEO_SET = 7;
+// The options of a video-set session as they are stored: the date of its first video, how many videos, and whether the
+// owner chose that number (the AI may then ask about it, and may write another number when the owner answers it).
+export interface PlanVideoSetOptions {
+  date: string;
+  count: number;
+  countSet: boolean;
+}
+// One video of a video-set proposal, with the date it is planned on.
+export interface PlanVideoSetVideo {
+  ref: string;
+  title: string;
+  why: string;
+  beats: PlanBeat[];
+  closingLine: string;
+  date: string;
+}
+// A video-set proposal as the page draws it: the videos in date order, each ready for a phone-shaped preview.
+export interface PlanVideoSetView {
+  videos: PlanVideoSetVideo[];
+}
 
 // A required text: trimmed, not empty, at most `max` characters.
 const text = (max: number) => z.string().trim().min(1).max(max);
@@ -369,6 +391,23 @@ export const InstantIdeaSchema = z
   .object({ idea: text(LIMITS.idea), date })
   .strict();
 
+// The options of a video-set session: the date of the first video (the kind checks it against today and the end of the
+// plan) and how many videos, 1 to 7. Leave `count` out when the owner did not choose it.
+export const VideoSetOptionsSchema = z
+  .object({
+    date: date.optional(),
+    count: z.number().int().min(1).max(MAX_VIDEO_SET).optional(),
+  })
+  .strict();
+
+// The edits the owner makes to a video-set proposal when confirming it: another date for any of its videos (the kind
+// checks each against today and the end of the plan).
+export const VideoSetEditsSchema = z
+  .object({
+    dates: z.array(z.object({ ref: id, date }).strict()).max(MAX_VIDEO_SET).optional(),
+  })
+  .strict();
+
 // The body of a session's start: the kind of work, the owner's first text and the kind's own options (the kind checks
 // them).
 export const StartSessionSchema = z
@@ -378,6 +417,9 @@ export const StartSessionSchema = z
     options: z.record(z.unknown()).optional(),
   })
   .strict();
+
+// The query of `GET /content-plan/sessions/open`: the kind of session to resume.
+export const OpenSessionSchema = z.object({ kind: id }).strict();
 
 // The body of a session's answer: the round, the owner's edit of the summary and the answers.
 export const AnswerSessionSchema = z

@@ -9,7 +9,6 @@ import { PlanSession } from '@prisma/client';
 import { ChatTurn } from '@gitroom/nestjs-libraries/muse/muse.chat.service';
 import { canEditRole } from '@gitroom/nestjs-libraries/database/prisma/brands/brands.service';
 import { ContentPlanGenerator } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.generator';
-import { ContentPlanRepository } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.repository';
 import {
   ContentPlanService,
   InvalidPlanException,
@@ -27,6 +26,7 @@ import { stableJson } from '@gitroom/nestjs-libraries/database/prisma/content-pl
 import {
   AnswerSessionSchema,
   ConfirmSessionSchema,
+  OpenSessionSchema,
   PlanAnswer,
   PlanQuestion,
   PlanSessionRoundView,
@@ -47,11 +47,10 @@ const CLOSED: string[] = ['DONE', 'DISCARDED'];
 export class ContentPlanSessionService {
   private readonly _logger = new Logger(ContentPlanSessionService.name);
 
-  // Receives the storage of the sessions and of the plan, the writer of the AI calls, the plan service (credits, workflow
-  // engine and the parts of the setup the sessions share) and the kinds.
+  // Receives the storage of the sessions, the writer of the AI calls, the plan service (credits, workflow engine and the
+  // parts of the setup the sessions share) and the kinds.
   constructor(
     private _sessionRepository: ContentPlanSessionRepository,
-    private _contentPlanRepository: ContentPlanRepository,
     private _contentPlanGenerator: ContentPlanGenerator,
     private _contentPlanService: ContentPlanService,
     private _kinds: PlanSessionKinds
@@ -60,6 +59,13 @@ export class ContentPlanSessionService {
   // The session the page draws: its status, the current round or proposal and what the caller may do.
   async view(org: PlanOrganization, sessionId: string): Promise<PlanSessionView> {
     return this.viewOf(org, await this.owned(org, sessionId));
+  }
+
+  // The open session of a kind in the workspace, so the page can resume it; null when there is none.
+  async open(org: PlanOrganization, query: unknown): Promise<PlanSessionView | null> {
+    const body = this._contentPlanService.parse(OpenSessionSchema, query);
+    const session = await this._sessionRepository.findOpen(org.id, body.kind);
+    return session ? this.viewOf(org, session) : null;
   }
 
   // Starts a session from the owner's first text and answers the first round. The open sessions of the same kind are
@@ -72,8 +78,8 @@ export class ContentPlanSessionService {
         { path: 'kind', message: 'is not a kind of session' },
       ]);
     }
-    const options = kind.parseOptions(body.options ?? {});
-    const plan = await this._contentPlanRepository.ensure(org.id);
+    const plan = await kind.planOf(org);
+    const options = await kind.parseOptions(body.options ?? {}, org, plan);
     const session = await this._sessionRepository.create({
       organizationId: org.id,
       planId: plan.id,
@@ -88,7 +94,10 @@ export class ContentPlanSessionService {
         kind,
         0,
         [],
-        stableJson({ sourceText: body.sourceText })
+        stableJson({
+          sourceText: body.sourceText,
+          ...kind.openingOf?.(options),
+        })
       );
     } catch (err) {
       await this._sessionRepository.release(session.id, { status: 'DISCARDED' });
@@ -300,7 +309,7 @@ export class ContentPlanSessionService {
     const draft = await this._contentPlanService.charge(
       session.organizationId,
       session.planId,
-      'plan.proposal',
+      kind.proposalAction,
       () => kind.buildProposal(session, earlier, feedback)
     );
     const saved = await this._sessionRepository.saveProposal(session.id, {
@@ -371,7 +380,8 @@ export class ContentPlanSessionService {
     return this._contentPlanService.writeChatRound(
       org,
       session.planId,
-      (input) => this._contentPlanGenerator.chatRound(kind.roundFrame, input),
+      (input) =>
+        this._contentPlanGenerator.chatRound(kind.roundFrame, input, kind.roundHints),
       turns,
       newUserTurn,
       (round) =>

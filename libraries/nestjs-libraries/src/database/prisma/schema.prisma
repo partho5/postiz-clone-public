@@ -625,6 +625,7 @@ model PlanSession {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   rounds          PlanSessionRound[]
+  instantIdeas    PlanInstantIdea[]
 
   @@index([organizationId, kind, status])
   @@index([planId])
@@ -706,13 +707,16 @@ model PlanWeek {
 }
 
 // An owner's own video, dated by the owner. Not a day slot: no dayIndex, no effect on PlanDay or on the AI roadmap.
-// status: DRAFT (not shown to the phone) | PLANNED | RECORDED | MISSED.
+// status: DRAFT (not shown to the phone) | PLANNED | RECORDED | MISSED. sessionId is the planning session (a set of
+// videos) that made it; null for a one-shot instant idea.
 model PlanInstantIdea {
   id             String       @id @default(uuid())
   planId         String
   plan           ContentPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessionId      String?
+  session        PlanSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   date           String
   idea           String       @db.Text
   title          String
@@ -725,6 +729,7 @@ model PlanInstantIdea {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, date])
+  @@index([sessionId])
 }
 
 // One day of a week: the video to record that day. dayIndex is 0-6 within the week; beats are { hook, say } pairs.

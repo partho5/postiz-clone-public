@@ -634,8 +634,7 @@ export class ContentPlanService {
     const body = this.parse(InstantIdeaSchema, input);
     const plan = await this.activePlan(org);
     const today = this.today(org);
-    const last = await this._contentPlanRepository.lastWeek(plan.id);
-    if (body.date < today || body.date > (last ? addDays(last.weekStart, 6) : today)) {
+    if (body.date < today || body.date > (await this.planEnd(plan.id, today))) {
       throw new InvalidPlanException([
         { path: 'date', message: 'must be from today to the end of the plan' },
       ]);
@@ -1280,8 +1279,14 @@ export class ContentPlanService {
     );
   }
 
-  // The plan of the workspace when it is ACTIVE; the changes below need a confirmed plan.
-  private async activePlan(org: PlanOrganization) {
+  // The last date of the plan: the end of its last week, or today when it has no week yet.
+  async planEnd(planId: string, today: string) {
+    const last = await this._contentPlanRepository.lastWeek(planId);
+    return last ? addDays(last.weekStart, 6) : today;
+  }
+
+  // The plan of the workspace when it is ACTIVE; the changes below need a confirmed plan (the video-set sessions too).
+  async activePlan(org: PlanOrganization) {
     const plan = await this._contentPlanRepository.findByOrganization(org.id);
     if (!plan) {
       throw new PlanNotFoundException();
@@ -1519,7 +1524,7 @@ export class ContentPlanService {
   }
 
   // What the weekly calls know about the brand; a plan that was never confirmed has no facts to write from.
-  private writeContext(plan: PlanWithOrganization): PlanWriteContext {
+  writeContext(plan: PlanWithOrganization): PlanWriteContext {
     const facts = plan.facts as unknown as PlanFacts | null;
     if (!facts || !plan.direction) {
       throw new PlanAiFailed('The plan is not confirmed');
@@ -1677,7 +1682,7 @@ export class ContentPlanService {
   }
 
   // The brand-local date today.
-  private today(org: PlanBrand) {
+  today(org: PlanBrand) {
     return localToday(new Date(), org.timezone ?? BRAND_DEFAULT_TIMEZONE);
   }
 

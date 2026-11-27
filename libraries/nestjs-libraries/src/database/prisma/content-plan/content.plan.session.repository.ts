@@ -58,6 +58,14 @@ export class ContentPlanSessionRepository {
     });
   }
 
+  // The latest open session of a kind in the workspace (the one the owner can come back to), or null.
+  findOpen(organizationId: string, kind: string) {
+    return this._session.model.planSession.findFirst({
+      where: { organizationId, kind, status: { in: OPEN_STATUSES } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   // A session with the brand columns the AI calls are made from (for the jobs, which know only the session id).
   findWithOrganization(id: string) {
     return this._session.model.planSession.findUnique({

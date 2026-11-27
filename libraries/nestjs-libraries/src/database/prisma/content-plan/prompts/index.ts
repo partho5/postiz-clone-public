@@ -3,6 +3,7 @@
 import { SETUP_FRAME } from './setup.prompts';
 import { PROPOSAL_FRAME } from './proposal.prompts';
 import { INSTANT_FRAME } from './instant.prompts';
+import { VIDEO_SET_FRAME, VIDEO_SET_ROUND_FRAME } from './video-set.prompts';
 import {
   ANGLE_HINTS,
   DAY_FRAME,
@@ -16,6 +17,7 @@ export * from './setup.prompts';
 export * from './proposal.prompts';
 export * from './weekly.prompts';
 export * from './instant.prompts';
+export * from './video-set.prompts';
 
 export const PLANNER_MODEL = 'muse-spark-1.3-contributor';
 
@@ -27,7 +29,9 @@ export type PlannerPromptKey =
   | 'planner.frame.outline'
   | 'planner.frame.week'
   | 'planner.frame.day'
-  | 'planner.frame.instant';
+  | 'planner.frame.instant'
+  | 'planner.frame.video_set_round'
+  | 'planner.frame.video_set';
 
 // A frame that tells the model how to approach a video carries the angle hints after its text.
 const withAngles = (frame: string) => `${frame}\n\n${ANGLE_HINTS}`;
@@ -43,4 +47,6 @@ export const PLANNER_PROMPTS: Record<
   'planner.frame.week': { body: withAngles(WEEK_FRAME), effort: 'medium' },
   'planner.frame.day': { body: withAngles(DAY_FRAME), effort: 'medium' },
   'planner.frame.instant': { body: INSTANT_FRAME, effort: 'medium' },
+  'planner.frame.video_set_round': { body: VIDEO_SET_ROUND_FRAME, effort: 'low' },
+  'planner.frame.video_set': { body: VIDEO_SET_FRAME, effort: 'medium' },
 };

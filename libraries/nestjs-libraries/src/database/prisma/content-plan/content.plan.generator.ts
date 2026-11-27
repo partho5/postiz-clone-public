@@ -19,6 +19,7 @@ import {
   PROPOSAL_FIELD_HINTS,
   PlannerPromptKey,
   SETUP_FIELD_HINTS,
+  VIDEO_SET_FIELD_HINTS,
   WEEKLY_FIELD_HINTS,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/prompts';
 import {
@@ -33,6 +34,7 @@ import {
   DEFAULT_VIDEO_SECONDS,
   LIMITS,
   MAX_ANSWER_OPTIONS,
+  MAX_VIDEO_SET,
   PlanBeat,
   PlanFacts,
   PlanQuestion,
@@ -65,24 +67,30 @@ const MAX_BEATS = 6;
 const MAX_THEMES = 6;
 const MIN_THEMES = 3;
 
+// The field hints of a question round's answer schema: the setup's, or another kind's with the same keys.
+export type RoundFieldHints = typeof SETUP_FIELD_HINTS;
+
 // The answer schemas of the model: Meta's strict subset (objects, arrays, strings, booleans, numbers; every field
 // required). The `.describe()` texts are the field hints of the prompt files; lengths are clamped after parsing.
-const setupSchema = z.object({
-  direction: z.string().describe(SETUP_FIELD_HINTS.direction),
-  questions: z
-    .array(
-      z.object({
-        text: z.string().describe(SETUP_FIELD_HINTS.text),
-        options: z.array(z.string()).describe(SETUP_FIELD_HINTS.options),
-        multiple: z.boolean().describe(SETUP_FIELD_HINTS.multiple),
-        recommendedIndexes: z
-          .array(z.number())
-          .describe(SETUP_FIELD_HINTS.recommendedIndexes),
-      })
-    )
-    .describe(SETUP_FIELD_HINTS.questions),
-  readyForPlan: z.boolean().describe(SETUP_FIELD_HINTS.readyForPlan),
-});
+const roundSchema = (hints: RoundFieldHints) =>
+  z.object({
+    direction: z.string().describe(hints.direction),
+    questions: z
+      .array(
+        z.object({
+          text: z.string().describe(hints.text),
+          options: z.array(z.string()).describe(hints.options),
+          multiple: z.boolean().describe(hints.multiple),
+          recommendedIndexes: z
+            .array(z.number())
+            .describe(hints.recommendedIndexes),
+        })
+      )
+      .describe(hints.questions),
+    readyForPlan: z.boolean().describe(hints.readyForPlan),
+  });
+
+const setupSchema = roundSchema(SETUP_FIELD_HINTS);
 
 const proposalSchema = z.object({
   facts: z
@@ -164,6 +172,28 @@ const instantSchema = z.object({
   closingLine: z.string().describe(INSTANT_FIELD_HINTS.closingLine),
 });
 
+// A video-set answer: the videos of the set, each one an instant idea's video with a ref.
+const videoSetSchema = z.object({
+  videos: z
+    .array(
+      z.object({
+        ref: z.string().describe(VIDEO_SET_FIELD_HINTS.ref),
+        title: z.string().describe(VIDEO_SET_FIELD_HINTS.title),
+        why: z.string().describe(VIDEO_SET_FIELD_HINTS.why),
+        beats: z
+          .array(
+            z.object({
+              hook: z.string().describe(VIDEO_SET_FIELD_HINTS.hook),
+              say: z.string().describe(VIDEO_SET_FIELD_HINTS.say),
+            })
+          )
+          .describe(VIDEO_SET_FIELD_HINTS.beats),
+        closingLine: z.string().describe(VIDEO_SET_FIELD_HINTS.closingLine),
+      })
+    )
+    .describe(VIDEO_SET_FIELD_HINTS.videos),
+});
+
 type RawVideo = z.infer<typeof instantSchema>;
 
 // A text trimmed and cut at a word to at most `max` characters.
@@ -215,6 +245,11 @@ export interface PlanInstantDraft {
   why: string;
   beats: PlanBeat[];
   closingLine: string;
+}
+
+// One video of a video set, written without a date: the session sets the dates.
+export interface PlanVideoSetDraft extends PlanInstantDraft {
+  ref: string;
 }
 
 // What a chat call (a setup round, the proposal or a revise) is made from.
@@ -307,17 +342,19 @@ export class ContentPlanGenerator {
   // One round of an interview chat on the frame `frameKey` (the setup's, or the frame of a session kind). The owner's
   // first text, the answers and edits are in `newUserTurn`; the earlier rounds are in `turns`. Questions and options get
   // ids made here (q1.., o1..); `assistantTurn` is the raw answer text, stored as it was said. The answer is read as
-  // `direction`, which a session stores as its summary.
+  // `direction`, which a session stores as its summary. `hints` are the field hints of the answer schema: the setup's
+  // unless a kind brings its own wording.
   async chatRound(
     frameKey: PlannerPromptKey,
-    input: PlanChatInput
+    input: PlanChatInput,
+    hints: RoundFieldHints = SETUP_FIELD_HINTS
   ): Promise<PlanChatRound> {
     const { data, text, usage } = await this.ask(
       input.orgId,
       frameKey,
       input.brandContext,
       [...input.turns, { role: 'user', content: input.newUserTurn }],
-      setupSchema,
+      hints === SETUP_FIELD_HINTS ? setupSchema : roundSchema(hints),
       'plan_setup'
     );
     const direction = cut(data.direction, LIMITS.direction);
@@ -616,6 +653,60 @@ export class ContentPlanGenerator {
       'plan_instant'
     );
     return { day: this.tidyVideo(data), usage };
+  }
+
+  // The videos of a video set from the owner's idea (`idea` is what was understood, `answers` what the owner chose), as
+  // the first turn of the proposal chat, or from the owner's `feedback` as the next turn after `turns`. `count` is how
+  // many videos to write, exactly when `countFixed` (the owner chose it), else a default that the idea or the answers may
+  // change; a revise may change it too. Videos get refs v1.. made here and no date. `userTurn` and `assistantTurn` are
+  // the texts of the turns, stored as they were said.
+  async writeVideoSet(
+    input: PlanWriteContext & {
+      idea: string;
+      answers: { question: string; answer: string }[];
+      count: number;
+      countFixed: boolean;
+      turns: ChatTurn[];
+      feedback: string | null;
+    }
+  ): Promise<{
+    videos: PlanVideoSetDraft[];
+    userTurn: string;
+    assistantTurn: string;
+    usage: PlanUsage;
+  }> {
+    const videoSeconds = this.videoSecondsOf(input.facts);
+    const userTurn = stableJson(
+      input.feedback
+        ? { feedback: input.feedback }
+        : {
+            idea: input.idea,
+            answers: input.answers.length ? input.answers : undefined,
+            videoCount: input.count,
+            videoCountFixed: input.countFixed,
+            videoSeconds,
+            beatsCount: beatsFor(videoSeconds),
+            targetWords: targetWordsFor(videoSeconds),
+            titleMaxChars: LIMITS.title,
+          }
+    );
+    const { data, text, usage } = await this.ask(
+      input.orgId,
+      'planner.frame.video_set',
+      this.contextOf(input),
+      [...input.turns, { role: 'user', content: userTurn }],
+      videoSetSchema,
+      'plan_video_set'
+    );
+    // exactly the owner's count on a first proposal that has one; otherwise 1 to the most a set holds
+    const exact = !input.feedback && input.countFixed ? input.count : null;
+    if (data.videos.length < (exact ?? 1)) {
+      throw new PlanAiFailed();
+    }
+    const videos = data.videos
+      .slice(0, exact ?? MAX_VIDEO_SET)
+      .map((video, index) => ({ ref: `v${index + 1}`, ...this.tidyVideo(video) }));
+    return { videos, userTurn, assistantTurn: text, usage };
   }
 
   // The video length of the facts when it is an allowed one, else the default.

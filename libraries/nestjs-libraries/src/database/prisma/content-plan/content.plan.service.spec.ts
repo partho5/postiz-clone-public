@@ -820,7 +820,11 @@ describe('ContentPlanService reset and facts', () => {
 describe('ContentPlanController', () => {
   it('refuses a USER member on every mutation and lets the read through', async () => {
     const { service } = build();
-    const controller = new ContentPlanController(service);
+    const sessions = {
+      view: jest.fn(async () => ({ id: 'session-1' })),
+      open: jest.fn(async () => null),
+    };
+    const controller = new ContentPlanController(service, sessions as any);
     const user = org(Role.USER);
     const calls = [
       () => controller.startSetup(user, {}),
@@ -830,6 +834,12 @@ describe('ContentPlanController', () => {
       () => controller.confirm(user, {}),
       () => controller.reset(user),
       () => controller.saveFacts(user, {}),
+      () => controller.startSession(user, {}),
+      () => controller.answerSession(user, 'session-1', {}),
+      () => controller.proposeSession(user, 'session-1', {}),
+      () => controller.reviseSession(user, 'session-1', {}),
+      () => controller.confirmSession(user, 'session-1', {}),
+      () => controller.discardSession(user, 'session-1'),
     ];
     for (const call of calls) {
       let code: string | undefined;
@@ -841,5 +851,9 @@ describe('ContentPlanController', () => {
       expect(code).toBe('ADMIN_REQUIRED');
     }
     expect((await controller.view(user)).canEdit).toBe(false);
+    // any member may read a session and resume the open one
+    expect(await controller.session(user, 'session-1')).toEqual({ id: 'session-1' });
+    expect(await controller.openSession(user, 'video_set')).toBeNull();
+    expect(sessions.open).toHaveBeenCalledWith(user, { kind: 'video_set' });
   });
 });

@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Res,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -18,21 +19,27 @@ import {
   ContentPlanService,
   PlanOrganization,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
+import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.service';
 import {
   PlanDayView,
   PlanInstantIdeaView,
+  PlanSessionView,
   PlanUpcomingView,
   PlanView,
   PlanWeekView,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
 
 // The `/content-plan` endpoints: read the plan, answer the setup rounds, ask for and confirm the proposal, and change a
-// running plan (direction, facts, videos per week, the weeks and their videos, the owner's own ideas).
+// running plan (direction, facts, videos per week, the weeks and their videos, the owner's own ideas), and the planning
+// sessions (a set of videos from the owner's idea).
 @ApiTags('Content plan')
 @Controller('/content-plan')
 export class ContentPlanController {
-  // Receives the service that owns the content plan.
-  constructor(private _contentPlanService: ContentPlanService) {}
+  // Receives the service that owns the content plan and the one that runs its planning sessions.
+  constructor(
+    private _contentPlanService: ContentPlanService,
+    private _contentPlanSessionService: ContentPlanSessionService
+  ) {}
 
   // The plan of the calling workspace; status NONE when it has none.
   @Get('/')
@@ -232,6 +239,94 @@ export class ContentPlanController {
   ): Promise<PlanInstantIdeaView> {
     this.assertAdmin(org);
     return this._contentPlanService.confirmInstantIdea(org, id);
+  }
+
+  // The open session of a kind (so the page can resume it), or null; any member of the workspace may read it.
+  @Get('/sessions/open')
+  openSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Query('kind') kind: string
+  ): Promise<PlanSessionView | null> {
+    return this._contentPlanSessionService.open(org, { kind });
+  }
+
+  // A session of the workspace with its current round or proposal; any member may read it.
+  @Get('/sessions/:id')
+  session(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Param('id') id: string
+  ): Promise<PlanSessionView> {
+    return this._contentPlanSessionService.view(org, id);
+  }
+
+  // Starts a session from the owner's first text and answers its first round; admins only.
+  @Post('/sessions')
+  @HttpCode(200)
+  startSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Body() body: unknown
+  ): Promise<PlanSessionView> {
+    this.assertAdmin(org);
+    return this._contentPlanSessionService.start(org, body);
+  }
+
+  // Sends the answers and the edited summary of a round and answers the next one; admins only.
+  @Post('/sessions/:id/answer')
+  @HttpCode(200)
+  answerSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Param('id') id: string,
+    @Body() body: unknown
+  ): Promise<PlanSessionView> {
+    this.assertAdmin(org);
+    return this._contentPlanSessionService.answer(org, id, body);
+  }
+
+  // Starts writing the proposal; the page polls the session until it is PROPOSED; admins only.
+  @Post('/sessions/:id/propose')
+  @HttpCode(202)
+  proposeSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Param('id') id: string,
+    @Body() body: unknown
+  ): Promise<PlanSessionView> {
+    this.assertAdmin(org);
+    return this._contentPlanSessionService.propose(org, id, body);
+  }
+
+  // Starts writing a new proposal from the owner's feedback; admins only.
+  @Post('/sessions/:id/revise')
+  @HttpCode(202)
+  reviseSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Param('id') id: string,
+    @Body() body: unknown
+  ): Promise<PlanSessionView> {
+    this.assertAdmin(org);
+    return this._contentPlanSessionService.revise(org, id, body);
+  }
+
+  // Makes the proposal real, with the owner's edits, and ends the session; admins only.
+  @Post('/sessions/:id/confirm')
+  @HttpCode(200)
+  confirmSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Param('id') id: string,
+    @Body() body: unknown
+  ): Promise<PlanSessionView> {
+    this.assertAdmin(org);
+    return this._contentPlanSessionService.confirm(org, id, body);
+  }
+
+  // Ends the session without using its proposal; admins only.
+  @Post('/sessions/:id/discard')
+  @HttpCode(200)
+  discardSession(
+    @GetOrgFromRequest() org: PlanOrganization,
+    @Param('id') id: string
+  ): Promise<PlanSessionView> {
+    this.assertAdmin(org);
+    return this._contentPlanSessionService.discard(org, id);
   }
 
   // Refuses a member who is not an admin of the workspace; the policy guard no longer tells roles apart.

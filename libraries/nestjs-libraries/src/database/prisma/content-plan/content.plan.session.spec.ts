@@ -175,6 +175,8 @@ const buildKind = () => {
   const kind = {
     kind: 'test',
     roundFrame: 'planner.frame.setup' as const,
+    proposalAction: 'plan.proposal',
+    planOf: jest.fn(async (_org: unknown) => ({ id: 'plan-1', organizationId: ORG }) as any),
     parseOptions: jest.fn((options: any) => {
       if (options.count !== undefined && typeof options.count !== 'number') {
         throw new InvalidPlanException([{ path: 'options.count', message: 'must be a number' }]);
@@ -212,11 +214,11 @@ const build = (generatorOverrides: Record<string, any> = {}) => {
     temporal as any
   );
   const kind = buildKind();
+  kind.planOf.mockImplementation(async () => planRepository.ensure() as any);
   const kinds = new PlanSessionKinds();
   kinds.register(kind);
   const service = new ContentPlanSessionService(
     repository as any,
-    planRepository as any,
     generator as any,
     plans,
     kinds

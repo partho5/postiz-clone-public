@@ -856,6 +856,27 @@ export class ContentPlanRepository {
     });
   }
 
+  // Adds the videos of a confirmed video-set session to the plan as planned instant ideas, one per video on its date, all
+  // linked to the session, in one write.
+  createSessionVideos(
+    planId: string,
+    organizationId: string,
+    sessionId: string,
+    idea: string,
+    videos: { date: string; title: string; why: string; beats: Prisma.InputJsonValue; closingLine: string }[]
+  ) {
+    return this._instant.model.planInstantIdea.createMany({
+      data: videos.map((video) => ({
+        planId,
+        organizationId,
+        sessionId,
+        idea,
+        status: 'PLANNED',
+        ...video,
+      })),
+    });
+  }
+
   // Removes the drafts that were never added and are older than a moment.
   purgeStaleDrafts(olderThan: Date) {
     return this._instant.model.planInstantIdea.deleteMany({
