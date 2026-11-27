@@ -16,7 +16,7 @@ import {
 } from '@prisma/client';
 import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import { TypedSearchAttributes } from '@temporalio/common';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { TemporalService } from 'nestjs-temporal-core';
 import { z } from 'zod';
 import { ChatTurn } from '@gitroom/nestjs-libraries/muse/muse.chat.service';
@@ -71,6 +71,7 @@ import {
   InstantIdeaSchema,
   LIMITS,
   PhoneDayView,
+  PhoneWeekStamp,
   PhoneWeekView,
   PlanAnswer,
   PlanBeat,
@@ -749,6 +750,30 @@ export class ContentPlanService {
     };
   }
 
+  // A cheap value that differs whenever the phone week would: the plan status, the brand's today and timezone, the week, and
+  // the newest change and the count of its days and of the instant ideas in its range. Only aggregates are read, so the
+  // phone can ask often and fetch the whole week only when this changed. With no plan or week it is still a stable value.
+  async weekStamp(org: PlanOrganization): Promise<PhoneWeekStamp> {
+    const today = this.today(org);
+    const plan = await this._contentPlanRepository.findByOrganization(org.id);
+    const change = plan
+      ? await this._contentPlanRepository.weekChange(plan.id, org.id, addDays(today, -6), today)
+      : null;
+    const parts = [
+      plan?.status ?? 'NONE',
+      today,
+      org.timezone ?? BRAND_DEFAULT_TIMEZONE,
+      change?.week.id,
+      change?.week.status,
+      change?.week.updatedAt.getTime(),
+      change?.daysUpdatedAt?.getTime(),
+      change?.dayCount,
+      change?.instantUpdatedAt?.getTime(),
+      change?.instantCount,
+    ];
+    return { stamp: createHash('sha256').update(JSON.stringify(parts)).digest('hex') };
+  }
+
   // The proposal job (called by the activity): the structure of the plan from the proposal chat, the ideas of the 12
   // weeks, and an outline for each of the first weeks. `feedback` is the owner's words of a revise, sent as the next
   // turn of the stored chat; without it the chat starts from the direction. A failure is thrown, and the job's failure
@@ -1419,17 +1444,26 @@ export class ContentPlanService {
     };
   }
 
-  // The videos of a week with its instant ideas (already in date order) put in: by date, an AI day before an instant idea of
-  // the same date.
+  // The videos of a week with its instant ideas (already in date order) put in: by date, an instant idea before the AI days
+  // of the same date (the owner added it on purpose, so the phone records it first), and instant ideas of the same date in
+  // the order they came in.
   private withInstantIdeas<T extends { date: string }>(
     days: T[],
     instant: PlanInstantIdea[],
     asDay: (idea: PlanInstantIdea) => T
   ): T[] {
-    const merged = [...days];
-    for (const idea of instant) {
-      const at = merged.findIndex((day) => day.date > idea.date);
-      merged.splice(at < 0 ? merged.length : at, 0, asDay(idea));
+    const merged: T[] = [];
+    let next = 0;
+    for (const day of days) {
+      while (next < instant.length && instant[next].date <= day.date) {
+        merged.push(asDay(instant[next]));
+        next += 1;
+      }
+      merged.push(day);
+    }
+    while (next < instant.length) {
+      merged.push(asDay(instant[next]));
+      next += 1;
     }
     return merged;
   }

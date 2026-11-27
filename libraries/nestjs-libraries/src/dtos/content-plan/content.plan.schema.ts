@@ -188,6 +188,11 @@ export interface PhoneWeekView {
     days: PhoneDayView[];
   } | null;
 }
+// The phone's cheap "did the week change" value (`GET /public/v1/content-plan/week/stamp`): opaque, it differs whenever
+// `PhoneWeekView` would.
+export interface PhoneWeekStamp {
+  stamp: string;
+}
 // A round of the setup as the owner sees it when going back to it: its questions, the answers given (null before the
 // owner answered) and the direction as the owner left it.
 export interface PlanRoundView {

@@ -7,7 +7,7 @@ import {
   ContentPlanService,
   PlanOrganization,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
-import { PhoneWeekView } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
+import { PhoneWeekStamp, PhoneWeekView } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
 import { RequireScope } from '@gitroom/backend/services/auth/scopes/require.scope';
 import { ScopeGuard } from '@gitroom/backend/services/auth/scopes/scope.guard';
 import { FeatureGuard } from '@gitroom/backend/services/auth/scopes/feature.guard';
@@ -26,6 +26,15 @@ export class PublicContentPlanController {
   week(@GetOrgFromRequest() org: PlanOrganization): Promise<PhoneWeekView> {
     Sentry.metrics.count('public_api-request', 1);
     return this._contentPlanService.phoneWeek(org);
+  }
+
+  // A cheap value that changes whenever `/content-plan/week` would answer something else, so the phone fetches the week
+  // only then. Still 200 with a stable value when the brand has no plan or week.
+  @Get('/content-plan/week/stamp')
+  @RequireScope('posts:read')
+  weekStamp(@GetOrgFromRequest() org: PlanOrganization): Promise<PhoneWeekStamp> {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._contentPlanService.weekStamp(org);
   }
 
   // The owner recorded this video; answers the same 200 when it was recorded already, 404 for another workspace's.

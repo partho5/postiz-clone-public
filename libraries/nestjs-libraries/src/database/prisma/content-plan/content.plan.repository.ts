@@ -7,6 +7,7 @@ import {
   PrismaTransaction,
 } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ChatTurn } from '@gitroom/nestjs-libraries/muse/muse.chat.service';
+import { addDays } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
 import {
   PlanAnswer,
   PlanBeat,
@@ -362,6 +363,48 @@ export class ContentPlanRepository {
       where: { planId, weekStart: { gte: earliestStart, lte: latestStart } },
       orderBy: { weekStart: 'desc' },
     });
+  }
+
+  // What tells whether the week that contains today changed, without reading it: the week, and for its days and for the
+  // instant ideas in its range the newest `updatedAt` and the row count (a deleted row changes the count). Null when the
+  // plan has no such week.
+  async weekChange(
+    planId: string,
+    organizationId: string,
+    earliestStart: string,
+    latestStart: string
+  ) {
+    const week = await this._week.model.planWeek.findFirst({
+      where: { planId, weekStart: { gte: earliestStart, lte: latestStart } },
+      orderBy: { weekStart: 'desc' },
+      select: { id: true, weekStart: true, status: true, updatedAt: true },
+    });
+    if (!week) {
+      return null;
+    }
+    const [days, instant] = await Promise.all([
+      this._day.model.planDay.aggregate({
+        where: { weekId: week.id },
+        _max: { updatedAt: true },
+        _count: { _all: true },
+      }),
+      this._instant.model.planInstantIdea.aggregate({
+        where: {
+          organizationId,
+          status: { not: 'DRAFT' },
+          date: { gte: week.weekStart, lte: addDays(week.weekStart, 6) },
+        },
+        _max: { updatedAt: true },
+        _count: { _all: true },
+      }),
+    ]);
+    return {
+      week,
+      daysUpdatedAt: days._max.updatedAt,
+      dayCount: days._count._all,
+      instantUpdatedAt: instant._max.updatedAt,
+      instantCount: instant._count._all,
+    };
   }
 
   // The earliest week of the plan (its weeks are counted from it).

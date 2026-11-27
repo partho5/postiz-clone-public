@@ -2,9 +2,11 @@
 // choice. Needs no network, database or Temporal: the storage is an in-memory stand-in, and the generator, the credits
 // and the workflow engine are stubs. Covers a date out of range (INVALID_PLAN), a second start replacing the first draft,
 // DRAFT_NOT_READY before the refine, a failed refine (notice set, plan free, credits released, draft kept), one charge
-// per refine, a confirmed idea in the phone week after the AI day (kind INSTANT_IDEA, dayIndex and angle null), hidden
-// while the week is not READY, a past planned one shown as MISSED, recorded idempotent and 404 for another workspace,
-// and the AI days, videosPerWeek and roadmap untouched by it.
+// per refine, a confirmed idea in the phone week before the AI day of the same date (kind INSTANT_IDEA, dayIndex and angle
+// null; instant ideas of one date keep their order, in the web week too), hidden while the week is not READY, a past
+// planned one shown as MISSED, recorded idempotent and 404 for another workspace, and the AI days, videosPerWeek and
+// roadmap untouched by it. The week stamp stays the same while nothing changes and moves on a confirm, a regenerate, a
+// recorded mark, a deleted idea and a new day, and is still 200 for a brand with no plan.
 import { ContentPlanService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
 import { addDays } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
 import { PlanFacts, SLOT_DAYS } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
@@ -72,10 +74,23 @@ class FakeRepository {
   days: any[] = [];
   instants: any[] = [];
   private _id = 0;
+  private _clock = 0;
+
+  // Moves a row's updatedAt forward, as the database does on every write.
+  private touch = (row: any) => {
+    row.updatedAt = new Date(NOW.getTime() + (this._clock += 1000));
+  };
 
   // A week row with the defaults of the table.
   addWeek(data: any) {
-    const week = { id: `week-${(this._id += 1)}`, planId: 'plan-1', clusterId: 'c1', idea: 'An idea', ...data };
+    const week = {
+      id: `week-${(this._id += 1)}`,
+      planId: 'plan-1',
+      clusterId: 'c1',
+      idea: 'An idea',
+      updatedAt: NOW,
+      ...data,
+    };
     this.weeks.push(week);
     return week;
   }
@@ -95,6 +110,7 @@ class FakeRepository {
       status: 'PLANNED',
       busy: false,
       version: 1,
+      updatedAt: NOW,
       ...data,
     };
     this.days.push(day);
@@ -113,6 +129,7 @@ class FakeRepository {
       status: 'PLANNED',
       recordedAt: null,
       createdAt: new Date(),
+      updatedAt: NOW,
       ...data,
     };
     this.instants.push(row);
@@ -156,7 +173,16 @@ class FakeRepository {
     const day = this.days.find((known) => known.id === dayId && known.organizationId === orgId);
     if (day && day.status !== 'RECORDED') {
       Object.assign(day, { status: 'RECORDED', busy: false, recordedAt: at, version: day.version + 1 });
+      this.touch(day);
     }
+  };
+  holdDays = async (ids: string[]) => {
+    this.days.forEach((day) => {
+      if (ids.includes(day.id) && day.status === 'PLANNED') {
+        day.busy = true;
+        this.touch(day);
+      }
+    });
   };
   openDraft = async (orgId: string) =>
     this.instants.find((row) => row.organizationId === orgId && row.status === 'DRAFT') ?? null;
@@ -194,18 +220,45 @@ class FakeRepository {
       return false;
     }
     row.status = 'PLANNED';
+    this.touch(row);
     return true;
   };
   markInstantRecorded = async (orgId: string, id: string, at: Date) => {
     const row = this.instants.find((known) => known.id === id && known.organizationId === orgId);
     if (row && ['PLANNED', 'MISSED'].includes(row.status)) {
       Object.assign(row, { status: 'RECORDED', recordedAt: at });
+      this.touch(row);
     }
   };
   instantIdeasBetween = async (orgId: string, from: string, to: string) =>
     this.instants
       .filter((row) => row.organizationId === orgId && row.status !== 'DRAFT' && row.date >= from && row.date <= to)
       .sort((a, b) => a.date.localeCompare(b.date));
+  weekChange = async (_id: string, orgId: string, from: string, to: string) => {
+    const week = this.sorted()
+      .filter((known) => known.weekStart >= from && known.weekStart <= to)
+      .slice(-1)[0];
+    if (!week) {
+      return null;
+    }
+    const days = this.days.filter((day) => day.weekId === week.id);
+    const instant = this.instants.filter(
+      (row) =>
+        row.organizationId === orgId &&
+        row.status !== 'DRAFT' &&
+        row.date >= week.weekStart &&
+        row.date <= addDays(week.weekStart, 6)
+    );
+    const newest = (rows: any[]) =>
+      rows.length ? new Date(Math.max(...rows.map((row) => row.updatedAt.getTime()))) : null;
+    return {
+      week: { id: week.id, weekStart: week.weekStart, status: week.status, updatedAt: week.updatedAt },
+      daysUpdatedAt: newest(days),
+      dayCount: days.length,
+      instantUpdatedAt: newest(instant),
+      instantCount: instant.length,
+    };
+  };
   purgeStaleDrafts = jest.fn(async () => ({ count: 0 }));
   activePlans = async () => [];
 }
@@ -426,7 +479,7 @@ describe('ContentPlanService instant ideas', () => {
   });
 
   describe('the week', () => {
-    it('shows a confirmed idea in the phone week after the AI day of the same date, as an instant idea', async () => {
+    it('shows a confirmed idea in the phone week before the AI day of the same date, as an instant idea', async () => {
       const { service, repository } = build();
       readyWeek(repository);
       const started = await service.startInstantIdea(org, { idea: 'x', date: TODAY });
@@ -434,8 +487,8 @@ describe('ContentPlanService instant ideas', () => {
       await service.refineInstantIdea(id);
       await service.confirmInstantIdea(org, id);
       const { week } = await service.phoneWeek(org);
-      expect(week?.days.map((day) => day.kind)).toEqual(['PLANNED', 'PLANNED', 'INSTANT_IDEA', 'PLANNED']);
-      expect(week?.days[2]).toEqual({
+      expect(week?.days.map((day) => day.kind)).toEqual(['PLANNED', 'INSTANT_IDEA', 'PLANNED', 'PLANNED']);
+      expect(week?.days[1]).toEqual({
         id,
         kind: 'INSTANT_IDEA',
         date: TODAY,
@@ -448,7 +501,31 @@ describe('ContentPlanService instant ideas', () => {
         status: 'PLANNED',
         version: 0,
       });
-      expect(week?.days[1].date).toBe(TODAY);
+      expect(week?.days[2].date).toBe(TODAY);
+    });
+
+    it('puts instant ideas of one date before the AI day of that date and in their own order, in the phone week and the web week', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      const first = repository.addInstant({ date: TODAY, title: 'First' });
+      const second = repository.addInstant({ date: TODAY, title: 'Second' });
+      const earlier = repository.addInstant({ date: addDays(TODAY, -2), title: 'Earlier' });
+      const later = repository.addInstant({ date: addDays(TODAY, 3), title: 'Later' });
+      const aiToday = repository.days[1].id;
+      const phone = await service.phoneWeek(org);
+      const web = await service.currentWeek(org);
+      for (const days of [phone.week?.days, web?.days]) {
+        expect(days?.map((day) => day.id)).toEqual([
+          earlier.id,
+          repository.days[0].id,
+          first.id,
+          second.id,
+          aiToday,
+          repository.days[2].id,
+          later.id,
+        ]);
+        expect(days?.map((day) => day.date)).toEqual([...(days?.map((day) => day.date) ?? [])].sort());
+      }
     });
 
     it('puts an instant idea of an earlier date before the later AI day, and shows it in the web week too', async () => {
@@ -520,6 +597,108 @@ describe('ContentPlanService instant ideas', () => {
       readyWeek(repository);
       const day = repository.days[0];
       expect((await service.recorded(org, day.id)).status).toBe('RECORDED');
+    });
+  });
+
+  describe('weekStamp', () => {
+    // The stamp of the week as the phone asks for it.
+    const stampOf = async (service: ContentPlanService) => (await service.weekStamp(org)).stamp;
+
+    it('is an opaque string that stays the same while nothing changes', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      repository.addInstant({ date: TODAY });
+      const first = await stampOf(service);
+      expect(typeof first).toBe('string');
+      expect(first.length).toBeGreaterThan(0);
+      expect(await stampOf(service)).toBe(first);
+    });
+
+    it('moves when an instant idea is confirmed', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      const started = await service.startInstantIdea(org, { idea: 'x', date: TODAY });
+      const id = started.instantDraft?.id as string;
+      await service.refineInstantIdea(id);
+      const before = await stampOf(service);
+      await service.confirmInstantIdea(org, id);
+      const after = await stampOf(service);
+      expect(after).not.toBe(before);
+      await service.confirmInstantIdea(org, id);
+      expect(await stampOf(service)).toBe(after);
+    });
+
+    it('moves when a day is regenerated', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      const before = await stampOf(service);
+      await service.regenerate(org, repository.days[1].id);
+      expect(await stampOf(service)).not.toBe(before);
+    });
+
+    it('moves when an AI day or an instant idea is recorded', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      const row = repository.addInstant({ date: TODAY });
+      const start = await stampOf(service);
+      await service.recorded(org, repository.days[0].id);
+      const afterDay = await stampOf(service);
+      expect(afterDay).not.toBe(start);
+      await service.recorded(org, row.id);
+      expect(await stampOf(service)).not.toBe(afterDay);
+    });
+
+    it('moves when an instant idea is added or deleted, even one that is not the newest', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      const old = repository.addInstant({ date: TODAY });
+      repository.addInstant({ date: addDays(TODAY, 1), updatedAt: new Date(NOW.getTime() + 5000) });
+      const withTwo = await stampOf(service);
+      repository.instants = repository.instants.filter((row) => row.id !== old.id);
+      const withOne = await stampOf(service);
+      expect(withOne).not.toBe(withTwo);
+      repository.addInstant({ date: addDays(TODAY, 2) });
+      expect(await stampOf(service)).not.toBe(withOne);
+    });
+
+    it('does not move for a draft, or for an idea of another week', async () => {
+      const { service, repository } = build();
+      readyWeek(repository);
+      const before = await stampOf(service);
+      repository.addInstant({ status: 'DRAFT', date: TODAY });
+      repository.addInstant({ date: addDays(TODAY, 20) });
+      expect(await stampOf(service)).toBe(before);
+    });
+
+    it('moves when the week changes status or the brand date rolls over', async () => {
+      const { service, repository } = build();
+      const week = readyWeek(repository);
+      const before = await stampOf(service);
+      week.status = 'GENERATING';
+      week.updatedAt = new Date(NOW.getTime() + 1000);
+      const afterStatus = await stampOf(service);
+      expect(afterStatus).not.toBe(before);
+      week.status = 'READY';
+      week.updatedAt = NOW;
+      expect(await stampOf(service)).toBe(before);
+      jest.setSystemTime(new Date('2026-03-11T12:00:00Z'));
+      try {
+        expect(await stampOf(service)).not.toBe(before);
+      } finally {
+        jest.setSystemTime(NOW);
+      }
+    });
+
+    it('answers a stable stamp for a brand with no plan and for a plan with no week', async () => {
+      const { service, repository } = build();
+      const none = (await service.weekStamp(otherOrg)).stamp;
+      expect(none.length).toBeGreaterThan(0);
+      expect((await service.weekStamp(otherOrg)).stamp).toBe(none);
+      const idle = await stampOf(service);
+      expect(await stampOf(service)).toBe(idle);
+      expect(idle).not.toBe(none);
+      readyWeek(repository);
+      expect(await stampOf(service)).not.toBe(idle);
     });
   });
 
