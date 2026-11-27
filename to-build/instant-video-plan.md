@@ -138,7 +138,7 @@ Verification is deferred by the owner (2026-11-27): coders only for now, and eve
 | IV2 | done, awaiting verify | web 60731462 | |
 | IV3 | done, awaiting verify | web 828234d8, FaceCam 0df114b | |
 | IV4 | done, awaiting verify | web 8cd29519 | |
-| IV5 | todo | | |
+| IV5 | in progress | | |
 | IV6 | done, awaiting verify | FaceCam b85b2fe | |
 | IV7 | done, awaiting verify | FaceCam eb8563f | |
 | IV8 | todo | | |
