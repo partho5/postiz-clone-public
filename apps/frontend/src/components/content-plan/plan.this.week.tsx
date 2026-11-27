@@ -7,6 +7,7 @@ import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { PlanDayCard } from '@gitroom/frontend/components/content-plan/plan.day.card';
+import { PlanInstantButton } from '@gitroom/frontend/components/content-plan/plan.instant.modal';
 import {
   PLAN_OUTLINE_BUTTON,
   PlanFailed,
@@ -21,13 +22,14 @@ import {
   PlanWeekView,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
 
-// The brief of the week and the button that writes the planned videos again from it. It starts again when the server's
-// brief changes (the AI wrote it, or it was saved).
-const PlanBrief: FC<{ week: PlanWeekView; canEdit: boolean; working: boolean }> = ({
-  week,
-  canEdit,
-  working,
-}) => {
+// The brief of the week, the button that writes the planned videos again from it and the one that opens the instant video
+// plan. It starts again when the server's brief changes (the AI wrote it, or it was saved).
+const PlanBrief: FC<{
+  week: PlanWeekView;
+  today: string;
+  canEdit: boolean;
+  working: boolean;
+}> = ({ week, today, canEdit, working }) => {
   const t = useT();
   const { send, pending } = usePlanRequest();
   const saved = week.brief ?? '';
@@ -57,7 +59,7 @@ const PlanBrief: FC<{ week: PlanWeekView; canEdit: boolean; working: boolean }> 
         onChange={(event) => setBrief(event.target.value)}
       />
       {canEdit && (
-        <div className="flex">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-[12px]">
           <Button
             loading={pending}
             disabled={working || !changed}
@@ -66,6 +68,7 @@ const PlanBrief: FC<{ week: PlanWeekView; canEdit: boolean; working: boolean }> 
           >
             {t('plan_regenerate', 'Regenerate')}
           </Button>
+          <PlanInstantButton today={today} />
         </div>
       )}
     </div>
@@ -116,6 +119,7 @@ export const PlanThisWeek: FC<{
         <PlanBrief
           key={`${week.id}:${week.brief ?? ''}`}
           week={week}
+          today={plan.today}
           canEdit={plan.canEdit}
           working={working || pending}
         />

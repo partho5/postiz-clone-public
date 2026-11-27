@@ -78,7 +78,9 @@ export const PlanDayCard: FC<{
   const recorded = day.status === 'RECORDED';
   // the server keeps a past video PLANNED in the current week; the page tells it from the date
   const missed = day.status === 'MISSED' || (day.status === 'PLANNED' && day.date < today);
-  const changeable = day.status === 'PLANNED' && day.date >= today;
+  // an instant video has no angle to change (the owner wrote the idea), so only a planned AI video is written again
+  const changeable =
+    day.kind === 'PLANNED' && day.status === 'PLANNED' && day.date >= today;
 
   const change = useCallback(() => {
     return send(
@@ -164,13 +166,15 @@ export const PlanDayCard: FC<{
       </div>
       {canEdit && (
         <div className="flex items-center gap-[12px] flex-wrap">
-          <Button
-            disabled={working || !changeable}
-            onClick={change}
-            className={PLAN_OUTLINE_BUTTON}
-          >
-            {t('plan_change_topic', 'Change this topic')}
-          </Button>
+          {day.kind === 'PLANNED' && (
+            <Button
+              disabled={working || !changeable}
+              onClick={change}
+              className={PLAN_OUTLINE_BUTTON}
+            >
+              {t('plan_change_topic', 'Change this topic')}
+            </Button>
+          )}
           {!recorded && (
             <PlanDayMenu disabled={working} onRecorded={markRecorded} />
           )}

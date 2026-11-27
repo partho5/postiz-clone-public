@@ -76,7 +76,7 @@ const THINKING_STEP_SECONDS = 3;
 
 // The line shown while the AI works on a part of the page. With a `kind` it walks through what is happening; the
 // timing lives in CSS animations (the dashboard loader's), so there is no timer to clean up.
-export const PlanThinking: FC<{ kind?: 'start' | 'round' | 'proposal' }> = ({
+export const PlanThinking: FC<{ kind?: 'start' | 'round' | 'proposal' | 'video' }> = ({
   kind,
 }) => {
   const t = useT();
@@ -101,6 +101,12 @@ export const PlanThinking: FC<{ kind?: 'start' | 'round' | 'proposal' }> = ({
       t('plan_wait_proposal_2', 'Choosing themes for your videos…'),
       t('plan_wait_proposal_3', 'Planning the first weeks…'),
       t('plan_wait_proposal_4', 'Writing your content plan…'),
+      t('plan_wait_almost', 'Almost ready…'),
+    ],
+    video: [
+      t('plan_wait_video_1', 'Reading your idea…'),
+      t('plan_wait_video_2', "Checking what's unclear…"),
+      t('plan_wait_video_3', 'Writing your video…'),
       t('plan_wait_almost', 'Almost ready…'),
     ],
   };
