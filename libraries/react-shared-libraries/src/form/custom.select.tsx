@@ -92,7 +92,7 @@ export const CustomSelect: FC<{
       )}
       <div
         className={clsx(
-          'bg-input h-[44px] border-fifth border rounded-[4px] text-inputText placeholder-inputText items-center justify-center flex'
+          'bg-newFieldBg h-[44px] border border-newTextColor/25 hover:border-newTextColor/40 transition-colors rounded-[8px] text-newTextColor items-center justify-center flex'
         )}
         onClick={changeOpen}
       >

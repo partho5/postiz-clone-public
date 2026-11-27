@@ -30,7 +30,7 @@ export const PlanSection: FC<{ title: string; children: React.ReactNode }> = ({
   title,
   children,
 }) => (
-  <div className="flex flex-col gap-[8px] bg-newBgColorInner rounded-[12px] p-[16px] border border-newTextColor/20 min-w-0">
+  <div className="flex flex-col gap-[12px] bg-newBgColorInner rounded-[16px] p-[20px] sm:p-[24px] border border-newTextColor/15 min-w-0">
     <div className="font-[600]">{title}</div>
     {children}
   </div>
@@ -41,9 +41,9 @@ export const PLAN_PRIMARY_BUTTON =
   'min-h-[48px] w-full sm:w-auto rounded-[10px] px-[28px] font-[600] bg-gradient-to-br from-[#6d35e8] to-[#4f46e5] ring-1 ring-inset ring-white/15 shadow-[0_6px_20px_rgba(97,43,211,0.35)] transition hover:brightness-110 hover:-translate-y-px';
 export const PLAN_OUTLINE_BUTTON =
   'min-h-[48px] w-full sm:w-auto rounded-[10px] px-[28px] font-[600] border border-btnPrimary !bg-transparent !text-newTextColor transition hover:!bg-btnPrimary/15';
-// A text box of the page, over the shared Textarea: full-contrast text and the same border as the cards.
-export const PLAN_TEXTAREA =
-  'w-full !rounded-[10px] !text-newTextColor !border-newTextColor/30 focus:!border-btnPrimary focus:shadow-[0_0_0_3px_rgba(97,43,211,0.25)]';
+// A select of the page: the shared field look (a recessed well), at the height of the page's buttons.
+export const PLAN_SELECT =
+  'h-[48px] w-full sm:w-[160px] bg-newFieldBg border border-newTextColor/25 hover:border-newTextColor/40 rounded-[10px] px-[14px] text-[15px] text-newTextColor outline-none transition-colors focus:border-btnPrimary focus:ring-[3px] focus:ring-btnPrimary/25 disabled:opacity-50';
 
 // The "Previous" button every step but the first has.
 export const PlanBackButton: FC<{ onClick: () => void; disabled?: boolean }> = ({
@@ -146,7 +146,7 @@ export const PlanFailed: FC<{
     <div className="flex items-center gap-[12px] flex-wrap">
       <div className="text-red-400">{text}</div>
       {onRetry && (
-        <Button secondary loading={loading} onClick={onRetry}>
+        <Button loading={loading} onClick={onRetry} className={PLAN_OUTLINE_BUTTON}>
           {t('plan_try_again', 'Try again')}
         </Button>
       )}

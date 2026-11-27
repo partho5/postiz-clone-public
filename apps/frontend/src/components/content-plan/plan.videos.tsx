@@ -4,7 +4,11 @@
 import React, { FC, useCallback, useState } from 'react';
 import { Button } from '@gitroom/react/form/button';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { PlanSection } from '@gitroom/frontend/components/content-plan/plan.parts';
+import {
+  PLAN_PRIMARY_BUTTON,
+  PLAN_SELECT,
+  PlanSection,
+} from '@gitroom/frontend/components/content-plan/plan.parts';
 import { usePlanRequest } from '@gitroom/frontend/components/content-plan/use.plan.request';
 import {
   PlanView,
@@ -30,7 +34,7 @@ const PlanVideosForm: FC<{ plan: PlanView }> = ({ plan }) => {
             disabled={pending || !!plan.busy}
             aria-label={t('plan_videos_per_week', 'Videos per week')}
             onChange={(event) => setVideosPerWeek(Number(event.target.value))}
-            className="bg-newBgColorInner h-[56px] border-2 border-newTextColor/15 rounded-[14px] px-[14px] text-[17px] focus:border-btnPrimary outline-none text-textColor w-full sm:w-[120px]"
+            className={PLAN_SELECT}
           >
             {VIDEOS_PER_WEEK.map((count) => (
               <option key={count} value={count}>
@@ -42,7 +46,7 @@ const PlanVideosForm: FC<{ plan: PlanView }> = ({ plan }) => {
             loading={pending}
             disabled={pending || !!plan.busy || videosPerWeek === plan.videosPerWeek}
             onClick={save}
-            className="min-h-[44px] w-full sm:w-auto"
+            className={PLAN_PRIMARY_BUTTON}
           >
             {t('plan_save', 'Save')}
           </Button>

@@ -4,7 +4,6 @@
 // (one editable text), its questions, and the choice to go on or to see the plan. Every step can be gone back to: it
 // shows what was entered, and changing it changes the steps after it.
 import React, { FC, useCallback, useState } from 'react';
-import clsx from 'clsx';
 import { useSWRConfig } from 'swr';
 import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
@@ -17,7 +16,6 @@ import {
 import {
   PLAN_OUTLINE_BUTTON,
   PLAN_PRIMARY_BUTTON,
-  PLAN_TEXTAREA,
   PlanBackButton,
   PlanChangeNote,
   PlanFailed,
@@ -139,7 +137,7 @@ export const PlanStartStep: FC<{ plan: PlanView; nav: PlanStepNav }> = ({
         dir="auto"
         value={sourceText}
         maxLength={LIMITS.sourceText}
-        className={clsx(PLAN_TEXTAREA, 'min-h-[220px]')}
+        className="min-h-[220px] w-full"
         onChange={(event) => setSourceText(event.target.value)}
       />
       {changed && (
@@ -259,7 +257,7 @@ export const PlanRoundStep: FC<{
           dir="auto"
           value={direction}
           maxLength={LIMITS.direction}
-          className={clsx(PLAN_TEXTAREA, 'min-h-[220px]')}
+          className="min-h-[220px] w-full"
           onChange={(event) => setDirection(event.target.value)}
         />
         <div className="text-newTextColor/60 text-[15px]">

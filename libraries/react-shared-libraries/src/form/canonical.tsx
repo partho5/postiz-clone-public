@@ -85,7 +85,7 @@ export const Canonical: FC<
       <input
         {...(disableForm ? {} : form.register(props.name))}
         className={clsx(
-          'bg-input h-[44px] px-[16px] outline-none border-fifth border rounded-[4px] text-inputText placeholder-inputText',
+          'bg-newFieldBg h-[44px] px-[16px] outline-none border border-newTextColor/25 hover:border-newTextColor/40 transition-colors focus:border-btnPrimary focus:ring-[3px] focus:ring-btnPrimary/25 rounded-[8px] text-newTextColor placeholder:text-newTextColor/50',
           className
         )}
         {...rest}

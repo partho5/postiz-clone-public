@@ -7,6 +7,7 @@ import { Button } from '@gitroom/react/form/button';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { PlanAngleChip } from '@gitroom/frontend/components/content-plan/plan.angle.chip';
 import {
+  PLAN_OUTLINE_BUTTON,
   PlanThinking,
   planDate,
 } from '@gitroom/frontend/components/content-plan/plan.parts';
@@ -37,14 +38,14 @@ const PlanDayMenu: FC<{ disabled: boolean; onRecorded: () => void }> = ({
         aria-expanded={open}
         aria-label={t('plan_day_more', 'More')}
         onClick={() => setOpen((held) => !held)}
-        className="min-h-[44px] min-w-[44px] rounded-[8px] border border-newTextColor/20 text-[18px] disabled:opacity-50"
+        className="min-h-[48px] min-w-[48px] rounded-[10px] border border-newTextColor/20 text-[18px] transition-colors hover:bg-newTextColor/5 hover:border-newTextColor/40 disabled:opacity-50"
       >
         ⋯
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute end-0 mt-[4px] z-10 min-w-[180px] bg-newBgColorInner border border-newTextColor/20 rounded-[8px] p-[4px]"
+          className="absolute end-0 mt-[4px] z-10 min-w-[180px] bg-newBgColorInner border border-newTextColor/20 rounded-[10px] p-[4px] shadow-menu"
         >
           <button
             type="button"
@@ -53,7 +54,7 @@ const PlanDayMenu: FC<{ disabled: boolean; onRecorded: () => void }> = ({
               setOpen(false);
               onRecorded();
             }}
-            className="w-full min-h-[44px] px-[12px] text-start rounded-[6px]"
+            className="w-full min-h-[44px] px-[12px] text-start rounded-[8px] hover:bg-newTextColor/5"
           >
             {t('plan_mark_recorded', 'Mark recorded')}
           </button>
@@ -164,10 +165,9 @@ export const PlanDayCard: FC<{
       {canEdit && (
         <div className="flex items-center gap-[12px] flex-wrap">
           <Button
-            secondary
             disabled={working || !changeable}
             onClick={change}
-            className="min-h-[44px]"
+            className={PLAN_OUTLINE_BUTTON}
           >
             {t('plan_change_topic', 'Change this topic')}
           </Button>

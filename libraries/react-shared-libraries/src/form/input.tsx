@@ -62,14 +62,15 @@ export const Input: FC<
       )}
       <div
         className={clsx(
-          'bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor placeholder-textColor flex items-center justify-center',
+          'bg-newFieldBg h-[42px] border border-newTextColor/25 hover:border-newTextColor/40 transition-colors focus-within:border-btnPrimary focus-within:ring-[3px] focus-within:ring-btnPrimary/25 rounded-[8px] text-newTextColor flex items-center justify-center',
+          props.disabled && 'opacity-50',
           className
         )}
       >
         {icon && <div className="ps-[16px]">{icon}</div>}
         <input
           className={clsx(
-            'h-full bg-transparent outline-none flex-1 text-[14px] text-textColor',
+            'h-full bg-transparent outline-none flex-1 text-[14px] text-newTextColor placeholder:text-newTextColor/50',
             icon ? 'pl-[8px] pe-[16px]' : 'px-[16px]'
           )}
           {...(disableForm ? {} : form.register(props.name))}

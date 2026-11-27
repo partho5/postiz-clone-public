@@ -8,6 +8,7 @@ import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { PlanDayCard } from '@gitroom/frontend/components/content-plan/plan.day.card';
 import {
+  PLAN_OUTLINE_BUTTON,
   PlanFailed,
   PlanSection,
   planWeekRange,
@@ -52,17 +53,16 @@ const PlanBrief: FC<{ week: PlanWeekView; canEdit: boolean; working: boolean }> 
         dir="auto"
         value={brief}
         maxLength={LIMITS.brief}
-        className="min-h-[120px] w-full"
+        className="min-h-[140px] w-full"
         onChange={(event) => setBrief(event.target.value)}
       />
       {canEdit && (
         <div className="flex">
           <Button
-            secondary
             loading={pending}
             disabled={working || !changed}
             onClick={regenerate}
-            className="min-h-[44px] w-full sm:w-auto"
+            className={PLAN_OUTLINE_BUTTON}
           >
             {t('plan_regenerate', 'Regenerate')}
           </Button>

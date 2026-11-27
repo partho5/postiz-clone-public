@@ -6,7 +6,11 @@ import { Button } from '@gitroom/react/form/button';
 import { Input } from '@gitroom/react/form/input';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { PlanSection } from '@gitroom/frontend/components/content-plan/plan.parts';
+import {
+  PLAN_PRIMARY_BUTTON,
+  PLAN_SELECT,
+  PlanSection,
+} from '@gitroom/frontend/components/content-plan/plan.parts';
 import { usePlanRequest } from '@gitroom/frontend/components/content-plan/use.plan.request';
 import {
   PlanFacts,
@@ -137,7 +141,7 @@ const PlanFactsForm: FC<{ plan: PlanView; facts: PlanFacts }> = ({
         onChange={(event) => set('tone', event.target.value)}
       />
       <div className="flex flex-col gap-[6px]">
-        <div className="text-[17px] font-[600]">{t('plan_fact_length', 'Video length')}</div>
+        <div className="text-[14px]">{t('plan_fact_length', 'Video length')}</div>
         <select
           value={draft.videoSeconds}
           disabled={disabled}
@@ -148,7 +152,7 @@ const PlanFactsForm: FC<{ plan: PlanView; facts: PlanFacts }> = ({
               Number(event.target.value) as PlanFacts['videoSeconds']
             )
           }
-          className="bg-newBgColorInner h-[56px] border-2 border-newTextColor/15 rounded-[14px] px-[14px] text-[17px] focus:border-btnPrimary outline-none text-textColor w-full sm:w-[160px]"
+          className={PLAN_SELECT}
         >
           {VIDEO_SECONDS.map((seconds) => (
             <option key={seconds} value={seconds}>
@@ -172,7 +176,7 @@ const PlanFactsForm: FC<{ plan: PlanView; facts: PlanFacts }> = ({
             loading={pending}
             disabled={disabled || !changed}
             onClick={save}
-            className="min-h-[44px] w-full sm:w-auto"
+            className={PLAN_PRIMARY_BUTTON}
           >
             {t('plan_save', 'Save')}
           </Button>

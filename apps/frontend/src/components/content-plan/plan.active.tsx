@@ -6,6 +6,7 @@ import React, { FC, useCallback } from 'react';
 import { Button } from '@gitroom/react/form/button';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { PLAN_OUTLINE_BUTTON } from '@gitroom/frontend/components/content-plan/plan.parts';
 import { PlanDirection } from '@gitroom/frontend/components/content-plan/plan.direction';
 import { PlanFactsEditor } from '@gitroom/frontend/components/content-plan/plan.facts';
 import { PlanThisWeek } from '@gitroom/frontend/components/content-plan/plan.this.week';
@@ -41,11 +42,10 @@ const PlanStartOver: FC<{ plan: PlanView }> = ({ plan }) => {
   return (
     <div className="flex">
       <Button
-        secondary
         loading={pending}
         disabled={pending || !!plan.busy}
         onClick={startOver}
-        className="min-h-[44px] w-full sm:w-auto"
+        className={PLAN_OUTLINE_BUTTON}
       >
         {t('plan_start_over', 'Start over')}
       </Button>

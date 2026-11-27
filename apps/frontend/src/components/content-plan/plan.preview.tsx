@@ -3,7 +3,6 @@
 // Content plan: the proposal. The owner reads the direction, the facts, the themes and the first weeks, then confirms
 // the whole plan or says what is not right (which writes a new proposal).
 import React, { FC, useCallback, useState } from 'react';
-import clsx from 'clsx';
 import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -11,7 +10,6 @@ import { PlanAngleChip } from '@gitroom/frontend/components/content-plan/plan.an
 import {
   PLAN_OUTLINE_BUTTON,
   PLAN_PRIMARY_BUTTON,
-  PLAN_TEXTAREA,
   PlanBackButton,
   PlanFailed,
   PlanSection,
@@ -226,7 +224,7 @@ export const PlanPreview: FC<{ plan: PlanView; onBack?: () => void }> = ({
                 dir="auto"
                 value={feedback}
                 maxLength={LIMITS.feedback}
-                className={clsx(PLAN_TEXTAREA, 'min-h-[120px]')}
+                className="min-h-[120px] w-full"
                 onChange={(event) => setFeedback(event.target.value)}
               />
               <div className="flex">

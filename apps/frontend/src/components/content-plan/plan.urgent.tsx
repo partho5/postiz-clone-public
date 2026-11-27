@@ -6,7 +6,10 @@ import React, { FC, useCallback, useState } from 'react';
 import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { PlanSection } from '@gitroom/frontend/components/content-plan/plan.parts';
+import {
+  PLAN_PRIMARY_BUTTON,
+  PlanSection,
+} from '@gitroom/frontend/components/content-plan/plan.parts';
 import { CURRENT_WEEK_KEY } from '@gitroom/frontend/components/content-plan/use.plan.current.week';
 import { usePlanRequest } from '@gitroom/frontend/components/content-plan/use.plan.request';
 import {
@@ -52,7 +55,7 @@ export const PlanUrgent: FC<{ week: PlanWeekView }> = ({ week }) => {
           loading={pending}
           disabled={working || !note.trim()}
           onClick={tell}
-          className="min-h-[44px] w-full sm:w-auto"
+          className={PLAN_PRIMARY_BUTTON}
         >
           {t('plan_urgent_send', 'Plan around it')}
         </Button>

@@ -6,6 +6,7 @@ import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
+  PLAN_PRIMARY_BUTTON,
   PlanFailed,
   PlanSection,
 } from '@gitroom/frontend/components/content-plan/plan.parts';
@@ -49,7 +50,7 @@ const PlanDirectionForm: FC<{ plan: PlanView }> = ({ plan }) => {
             loading={pending}
             disabled={working || !direction.trim() || direction.trim() === saved.trim()}
             onClick={save}
-            className="min-h-[44px] w-full sm:w-auto"
+            className={PLAN_PRIMARY_BUTTON}
           >
             {t('plan_save', 'Save')}
           </Button>

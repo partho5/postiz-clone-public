@@ -6,6 +6,8 @@ import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
+  PLAN_OUTLINE_BUTTON,
+  PLAN_PRIMARY_BUTTON,
   PlanSection,
   PlanThinking,
   planWeekRange,
@@ -68,15 +70,14 @@ const PlanUpcomingWeek: FC<{
               loading={pending}
               disabled={!idea.trim() || idea.trim() === week.idea.trim()}
               onClick={save}
-              className="min-h-[44px] w-full sm:w-auto"
+              className={PLAN_PRIMARY_BUTTON}
             >
               {t('plan_save', 'Save')}
             </Button>
             <Button
-              secondary
               disabled={pending}
               onClick={cancel}
-              className="min-h-[44px] w-full sm:w-auto"
+              className={PLAN_OUTLINE_BUTTON}
             >
               {t('plan_cancel', 'Cancel')}
             </Button>
