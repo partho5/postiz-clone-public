@@ -28,6 +28,8 @@ import { CreditsService } from '@gitroom/nestjs-libraries/database/prisma/credit
 import {
   ContentPlanGenerator,
   PlanAiFailed,
+  PlanChatInput,
+  PlanChatRound,
   PlanNotConfigured,
   PlanVideoContext,
   PlanWriteContext,
@@ -95,11 +97,20 @@ import { organizationId as organizationKey } from '@gitroom/nestjs-libraries/tem
 // The workspace the caller is in, with the caller's membership as the request middleware loads it.
 export type PlanOrganization = Organization & { users?: { role: Role }[] };
 
-// What a plan job is asked to do: `id` is the plan (proposal, revise, replan), the week (week, days), the day (day) or the
-// instant idea (instant).
+// What a plan job is asked to do: `id` is the plan (proposal, revise, replan), the week (week, days), the day (day), the
+// instant idea (instant) or the session (session_proposal, session_revise).
 // `feedback` is the owner's words of a revise; `fromDate` is the first date `days` writes again.
 export interface PlanJob {
-  kind: 'proposal' | 'revise' | 'week' | 'days' | 'day' | 'replan' | 'instant';
+  kind:
+    | 'proposal'
+    | 'revise'
+    | 'week'
+    | 'days'
+    | 'day'
+    | 'replan'
+    | 'instant'
+    | 'session_proposal'
+    | 'session_revise';
   id: string;
   feedback?: string;
   fromDate?: string;
@@ -154,14 +165,14 @@ export class PlanAiFailedException extends HttpException {
 }
 
 // The brand columns the AI calls are made from.
-interface PlanBrand {
+export interface PlanBrand {
   name: string;
   locale: string | null;
   timezone: string | null;
 }
 
 // The stored turns of a chat as the generator re-sends them; [] when nothing valid is stored.
-const storedTurns = (value: Prisma.JsonValue | null): ChatTurn[] =>
+export const storedTurns = (value: Prisma.JsonValue | null): ChatTurn[] =>
   Array.isArray(value) ? (value as unknown as ChatTurn[]) : [];
 
 // A week with its days.
@@ -1672,7 +1683,7 @@ export class ContentPlanService {
 
   // The brand context of the setup and the proposal chat: only the name and the language, so it stays the same for every
   // round (the direction lives in the chat turns).
-  private setupContext(org: PlanBrand) {
+  setupContext(org: PlanBrand) {
     return brandContextMessage({
       name: displayName(org.name),
       locale: org.locale ?? BRAND_DEFAULT_LOCALE,
@@ -1704,8 +1715,9 @@ export class ContentPlanService {
     return current ? addDays(current.weekStart, 7) : today;
   }
 
-  // The round written from the chat so far, saved with the exact texts of its turns (re-sent byte for byte next time).
-  private async writeRound(
+  // The setup round written from the chat so far, saved with the exact texts of its turns (re-sent byte for byte next
+  // time).
+  private writeRound(
     org: PlanBrand & { id: string },
     planId: string,
     index: number,
@@ -1713,8 +1725,40 @@ export class ContentPlanService {
     newUserTurn: string,
     beforeSave?: () => Promise<void>
   ) {
+    return this.writeChatRound(
+      org,
+      planId,
+      (input) => this._contentPlanGenerator.setupRound(input),
+      turns,
+      newUserTurn,
+      (round) =>
+        this._contentPlanRepository.saveRound({
+          planId,
+          index,
+          direction: round.direction,
+          questions: round.questions,
+          readyForPlan: round.readyForPlan,
+          userTurn: newUserTurn,
+          assistantTurn: round.assistantTurn,
+        }),
+      beforeSave
+    );
+  }
+
+  // One round of an interview chat, the part the setup and a session share: the AI call (`ask`) booked on the price-0
+  // action plan.setup_round, then `beforeSave` (a rewind that waits for the answer) and `save`, which stores the round
+  // with the exact texts of its turns.
+  async writeChatRound(
+    org: PlanBrand & { id: string },
+    planId: string,
+    ask: (input: PlanChatInput) => Promise<PlanChatRound>,
+    turns: ChatTurn[],
+    newUserTurn: string,
+    save: (round: PlanChatRound) => Promise<unknown>,
+    beforeSave?: () => Promise<void>
+  ) {
     const round = await this.charge(org.id, planId, 'plan.setup_round', () =>
-      this._contentPlanGenerator.setupRound({
+      ask({
         orgId: org.id,
         brandContext: this.setupContext(org),
         turns,
@@ -1722,21 +1766,13 @@ export class ContentPlanService {
       })
     );
     await beforeSave?.();
-    await this._contentPlanRepository.saveRound({
-      planId,
-      index,
-      direction: round.direction,
-      questions: round.questions,
-      readyForPlan: round.readyForPlan,
-      userTurn: newUserTurn,
-      assistantTurn: round.assistantTurn,
-    });
+    await save(round);
   }
 
   // The owner's answers as the model reads them: the question text and the answer text (the owner's own words when
   // given, else the chosen options' texts, or both for ticked options). The ids never reach the model. An answer to a question or option that is
   // not in the round is refused.
-  private resolveAnswers(stored: Prisma.JsonValue, answers: PlanAnswer[]) {
+  resolveAnswers(stored: Prisma.JsonValue, answers: PlanAnswer[]) {
     const questions = stored as unknown as PlanQuestion[];
     const fields: { path: string; message: string }[] = [];
     const resolved = answers.map((answer, index) => {
@@ -1778,7 +1814,7 @@ export class ContentPlanService {
   }
 
   // One AI call, booked on a price-0 action so charging can be switched on in the pricing table without code.
-  private charge<T>(
+  charge<T>(
     organizationId: string,
     planId: string,
     actionKey: string,
@@ -1797,10 +1833,20 @@ export class ContentPlanService {
 
   // Starts a job as a workflow whose id names the job, so the same job cannot run twice (409 PLAN_BUSY). When the job
   // holds the plan (`busyPlanId`) and cannot be started, the plan is freed and the call answers 503.
-  private async startJob(
+  private startJob(job: PlanJob, orgId: string, busyPlanId: string | null) {
+    return this.launchJob(
+      job,
+      orgId,
+      busyPlanId ? () => this._contentPlanRepository.release(busyPlanId) : null
+    );
+  }
+
+  // The workflow start of `startJob`. `free` gives back what the job holds (the plan, or a session) when the job cannot
+  // be started; null when it holds nothing.
+  async launchJob(
     job: PlanJob,
     orgId: string,
-    busyPlanId: string | null
+    free: (() => Promise<unknown>) | null
   ) {
     const client = this._temporalService.client.getRawClient();
     try {
@@ -1820,8 +1866,8 @@ export class ContentPlanService {
         // the running job holds the plan and frees it when it ends
         throw new PlanConflictException('PLAN_BUSY');
       }
-      if (busyPlanId) {
-        await this._contentPlanRepository.release(busyPlanId);
+      if (free) {
+        await free();
       }
       if (err instanceof PlanUnavailableException) {
         throw err;
@@ -1836,7 +1882,7 @@ export class ContentPlanService {
   }
 
   // The generator's two refusals as the HTTP answers of the synchronous setup routes; any other error passes on.
-  private aiError(err: unknown) {
+  aiError(err: unknown) {
     if (err instanceof PlanNotConfigured) {
       return new PlanUnavailableException();
     }
@@ -1847,7 +1893,7 @@ export class ContentPlanService {
   }
 
   // Validates an input against a schema; every failing path is answered as INVALID_PLAN.
-  private parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): T {
+  parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): T {
     const result = schema.safeParse(input);
     if (!result.success) {
       throw new InvalidPlanException(

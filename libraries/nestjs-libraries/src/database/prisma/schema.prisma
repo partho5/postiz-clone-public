@@ -57,6 +57,7 @@ model Organization {
   contentPlan         ContentPlan?
   planDays            PlanDay[]
   planInstantIdeas    PlanInstantIdea[]
+  planSessions        PlanSession[]
   slug                String?
   color               String?
   avatarUrl           String?
@@ -578,6 +579,7 @@ model ContentPlan {
   clusters         PlanCluster[]
   weeks            PlanWeek[]
   instantIdeas     PlanInstantIdea[]
+  sessions         PlanSession[]
 }
 
 // One question round of a plan's setup: what the AI understood and what it asked. userTurn and assistantTurn are the
@@ -596,6 +598,54 @@ model ContentPlanRound {
   createdAt     DateTime    @default(now())
 
   @@unique([planId, index])
+}
+
+// One run of the planning engine's interview -> proposal -> confirm procedure for a kind of work (a set of videos, a
+// future feature). kind names the PlanSessionKind that writes and confirms it. status: ASKING | PROPOSING | PROPOSED |
+// DONE | DISCARDED. busy names the job that holds the session (round | proposal | confirm); notice is a one-time message
+// for the owner. summary is what the AI understood (the owner may edit it); options are the kind's start options.
+// proposalTurns is the proposal/revise chat exactly as sent, so the next call re-sends it byte for byte.
+model PlanSession {
+  id              String             @id @default(uuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            ContentPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  kind            String
+  status          String             @default("ASKING")
+  sourceText      String?            @db.Text
+  summary         String?            @db.Text
+  options         Json?
+  proposal        Json?
+  proposalVersion Int                @default(0)
+  proposalTurns   Json?
+  busy            String?
+  notice          String?
+  confirmedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  rounds          PlanSessionRound[]
+
+  @@index([organizationId, kind, status])
+  @@index([planId])
+}
+
+// One question round of a session: what the AI understood and what it asked. userTurn and assistantTurn are the exact
+// texts of the chat, stored so the next round re-sends them byte for byte.
+model PlanSessionRound {
+  id            String      @id @default(uuid())
+  sessionId     String
+  session       PlanSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  index         Int
+  summary       String      @db.Text
+  questions     Json
+  answers       Json?
+  readyForPlan  Boolean     @default(false)
+  userTurn      String      @db.Text
+  assistantTurn String      @db.Text
+  createdAt     DateTime    @default(now())
+
+  @@unique([sessionId, index])
 }
 
 // A long-term theme (pillar) of a plan.

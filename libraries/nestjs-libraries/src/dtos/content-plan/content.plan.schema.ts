@@ -224,6 +224,34 @@ export interface PlanView {
   today: string;
 }
 
+export type PlanSessionStatus = 'ASKING' | 'PROPOSING' | 'PROPOSED' | 'DONE' | 'DISCARDED';
+// One round of a session, as the setup's `PlanRoundView` but with the summary of what the AI understood.
+export interface PlanSessionRoundView {
+  id: string;
+  index: number;
+  summary: string;
+  questions: PlanQuestion[];
+  answers: PlanAnswer[] | null;
+  readyForPlan: boolean;
+}
+// A session of the planning engine as the page draws it. `proposal` is what the kind's `viewOf` makes of the stored
+// proposal, shown only while the session is PROPOSED.
+export interface PlanSessionView {
+  id: string;
+  kind: string;
+  status: PlanSessionStatus;
+  canEdit: boolean;
+  sourceText: string | null;
+  summary: string | null;
+  options: Record<string, unknown> | null;
+  busy: string | null;
+  notice: string | null;
+  round: PlanSessionRoundView | null;
+  rounds: PlanSessionRoundView[];
+  proposalVersion: number;
+  proposal: unknown | null;
+}
+
 // A required text: trimmed, not empty, at most `max` characters.
 const text = (max: number) => z.string().trim().min(1).max(max);
 const id = z.string().min(1).max(64);
@@ -339,4 +367,43 @@ export const VideosPerWeekSchema = z.object({ videosPerWeek }).strict();
 // The body of `POST /content-plan/instant-ideas`: the owner's own idea and the day it is for.
 export const InstantIdeaSchema = z
   .object({ idea: text(LIMITS.idea), date })
+  .strict();
+
+// The body of a session's start: the kind of work, the owner's first text and the kind's own options (the kind checks
+// them).
+export const StartSessionSchema = z
+  .object({
+    kind: id,
+    sourceText: text(LIMITS.sourceText),
+    options: z.record(z.unknown()).optional(),
+  })
+  .strict();
+
+// The body of a session's answer: the round, the owner's edit of the summary and the answers.
+export const AnswerSessionSchema = z
+  .object({
+    roundId: id,
+    summary: text(LIMITS.direction),
+    answers: z.array(PlanAnswerSchema).max(4),
+  })
+  .strict();
+
+// The body of a session's proposal: the summary as the owner left it and the answers of the last round.
+export const ProposeSessionSchema = z
+  .object({
+    summary: text(LIMITS.direction),
+    answers: z.array(PlanAnswerSchema).max(4).optional(),
+  })
+  .strict();
+
+// The body of a session's revise.
+export const ReviseSessionSchema = ReviseSchema;
+
+// The body of a session's confirm: the proposal version the owner read and the edits the kind accepts (the kind checks
+// them).
+export const ConfirmSessionSchema = z
+  .object({
+    proposalVersion: z.number().int().min(0),
+    edits: z.record(z.unknown()).optional(),
+  })
   .strict();

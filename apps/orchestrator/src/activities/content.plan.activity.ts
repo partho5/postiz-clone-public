@@ -6,11 +6,15 @@ import {
   ContentPlanService,
   PlanJob,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
+import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.service';
 
 @Injectable()
 @Activity()
 export class ContentPlanActivity {
-  constructor(private _contentPlanService: ContentPlanService) {}
+  constructor(
+    private _contentPlanService: ContentPlanService,
+    private _contentPlanSessionService: ContentPlanSessionService
+  ) {}
 
   // Advances every ACTIVE plan: leftovers carried on, the week written, the roadmap topped up.
   @ActivityMethod()
@@ -18,8 +22,8 @@ export class ContentPlanActivity {
     return this._contentPlanService.tick(new Date());
   }
 
-  // Runs one job: the proposal or its revision, a week, some days or one day of a week, a replan of the roadmap, or the
-  // refining of an instant idea.
+  // Runs one job: the proposal or its revision (of the plan or of a session), a week, some days or one day of a week, a
+  // replan of the roadmap, or the refining of an instant idea.
   @ActivityMethod()
   async contentPlanRunJob(job: PlanJob) {
     switch (job.kind) {
@@ -37,10 +41,14 @@ export class ContentPlanActivity {
         return this._contentPlanService.replan(job.id);
       case 'instant':
         return this._contentPlanService.refineInstantIdea(job.id);
+      case 'session_proposal':
+        return this._contentPlanSessionService.buildProposal(job.id, null);
+      case 'session_revise':
+        return this._contentPlanSessionService.buildProposal(job.id, job.feedback ?? null);
     }
   }
 
-  // Ends a job that did not finish: the plan, week or day is free again and the owner is told it did not work.
+  // Ends a job that did not finish: the plan, week, day or session is free again and the owner is told it did not work.
   @ActivityMethod()
   async contentPlanJobFailed({ kind, id }: Pick<PlanJob, 'kind' | 'id'>) {
     switch (kind) {
@@ -57,6 +65,9 @@ export class ContentPlanActivity {
         return this._contentPlanService.replanFailed(id);
       case 'instant':
         return this._contentPlanService.instantFailed(id);
+      case 'session_proposal':
+      case 'session_revise':
+        return this._contentPlanSessionService.sessionFailed(id);
     }
   }
 }

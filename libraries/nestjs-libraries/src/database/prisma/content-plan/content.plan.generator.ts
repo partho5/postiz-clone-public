@@ -226,6 +226,15 @@ export interface PlanChatInput {
   newUserTurn: string;
 }
 
+// One written round of an interview chat.
+export interface PlanChatRound {
+  direction: string;
+  questions: PlanQuestion[];
+  readyForPlan: boolean;
+  assistantTurn: string;
+  usage: PlanUsage;
+}
+
 @Injectable()
 export class ContentPlanGenerator {
   private readonly _logger = new Logger(ContentPlanGenerator.name);
@@ -290,19 +299,22 @@ export class ContentPlanGenerator {
     return { data: answer.data as z.infer<T>, text: answer.text, usage };
   }
 
-  // One round of the setup interview. The owner's first text, the answers and edits are in `newUserTurn`; the earlier
-  // rounds are in `turns`. Questions and options get ids made here (q1.., o1..); `assistantTurn` is the raw answer
-  // text, stored as it was said.
-  async setupRound(input: PlanChatInput): Promise<{
-    direction: string;
-    questions: PlanQuestion[];
-    readyForPlan: boolean;
-    assistantTurn: string;
-    usage: PlanUsage;
-  }> {
+  // One round of the setup interview: `chatRound` on the setup frame.
+  setupRound(input: PlanChatInput): Promise<PlanChatRound> {
+    return this.chatRound('planner.frame.setup', input);
+  }
+
+  // One round of an interview chat on the frame `frameKey` (the setup's, or the frame of a session kind). The owner's
+  // first text, the answers and edits are in `newUserTurn`; the earlier rounds are in `turns`. Questions and options get
+  // ids made here (q1.., o1..); `assistantTurn` is the raw answer text, stored as it was said. The answer is read as
+  // `direction`, which a session stores as its summary.
+  async chatRound(
+    frameKey: PlannerPromptKey,
+    input: PlanChatInput
+  ): Promise<PlanChatRound> {
     const { data, text, usage } = await this.ask(
       input.orgId,
-      'planner.frame.setup',
+      frameKey,
       input.brandContext,
       [...input.turns, { role: 'user', content: input.newUserTurn }],
       setupSchema,
