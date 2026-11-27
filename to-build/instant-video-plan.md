@@ -134,7 +134,7 @@ high effort.
 
 | Card | Status | Commit | Verified |
 |---|---|---|---|
-| IV1 | in progress | | |
+| IV1 | done, awaiting verify | web b446a175 | |
 | IV2 | todo | | |
 | IV3 | todo | | |
 | IV4 | todo | | |
