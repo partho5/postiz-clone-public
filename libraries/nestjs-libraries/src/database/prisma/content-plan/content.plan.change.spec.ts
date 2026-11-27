@@ -13,6 +13,10 @@ jest.mock(
   () => ({ ContentPlanRepository: class {} })
 );
 jest.mock(
+  '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.repository',
+  () => ({ ContentPlanSessionRepository: class {} })
+);
+jest.mock(
   '@gitroom/nestjs-libraries/database/prisma/credits/credits.service',
   () => ({ CreditsService: class {} })
 );
@@ -98,8 +102,6 @@ class FakeRepository {
   private withDays = (week: any) => week && { ...week, days: this.daysOf(week.id), cluster: { theme: { name: 'Theme' } } };
 
   findByOrganization = async (id: string) => (id === ORG ? this.plan : null);
-  rounds = async () => [];
-  latestRound = async () => null;
   activeThemes = async () => [];
   openDraft = async () => null;
   instantIdeasBetween = async () => [];
@@ -186,7 +188,13 @@ const build = () => {
   const repository = new FakeRepository();
   const start = jest.fn(async () => undefined);
   const temporal = { client: { getRawClient: () => ({ workflow: { start } }) } };
-  const service = new ContentPlanService(repository as any, {} as any, {} as any, temporal as any);
+  const service = new ContentPlanService(
+    repository as any,
+    {} as any,
+    {} as any,
+    temporal as any,
+    { findOpen: async () => null, rounds: async () => [] } as any
+  );
   return { service, repository, start };
 };
 

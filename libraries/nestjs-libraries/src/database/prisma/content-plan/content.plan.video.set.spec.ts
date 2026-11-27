@@ -243,7 +243,7 @@ const build = () => {
   const spend = jest.fn(async (_request: any, run: () => Promise<unknown>) => run());
   const workflowStart = jest.fn(async () => undefined);
   const temporal = { client: { getRawClient: () => ({ workflow: { start: workflowStart } }) } };
-  const plans = new ContentPlanService(repository as any, generator as any, { spend } as any, temporal as any);
+  const plans = new ContentPlanService(repository as any, generator as any, { spend } as any, temporal as any, sessions as any);
   const kinds = new PlanSessionKinds();
   new VideoSetSessionKind(kinds, plans, repository as any, sessions as any, generator as any);
   const service = new ContentPlanSessionService(sessions as any, generator as any, plans, kinds);

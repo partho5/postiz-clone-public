@@ -22,7 +22,10 @@ import {
   PlanSessionKind,
   PlanSessionKinds,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.kind';
-import { stableJson } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
+import {
+  roundSummary,
+  stableJson,
+} from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
 import {
   AnswerSessionSchema,
   ConfirmSessionSchema,
@@ -41,6 +44,8 @@ import {
 const ANSWERABLE: string[] = ['ASKING', 'PROPOSED'];
 // The statuses of a session that has ended.
 const CLOSED: string[] = ['DONE', 'DISCARDED'];
+// The key of the owner's edit of the summary in a round's first turn, for a kind that has no key of its own.
+const EDITED_KEY = 'editedSummary';
 
 // The sessions of the planning engine: start, answer, propose, revise, confirm, discard and view.
 @Injectable()
@@ -163,7 +168,7 @@ export class ContentPlanSessionService {
         kind,
         latest.index + 1,
         turns,
-        stableJson({ answers, editedSummary }),
+        stableJson({ answers, [kind.editedKey ?? EDITED_KEY]: editedSummary }),
         rewinding ? save : undefined
       );
     } catch (err) {
@@ -183,6 +188,7 @@ export class ContentPlanSessionService {
   ): Promise<PlanSessionView> {
     const body = this._contentPlanService.parse(ProposeSessionSchema, input);
     const session = await this.owned(org, sessionId);
+    const kind = this.kindOf(session);
     if (CLOSED.includes(session.status)) {
       throw new PlanConflictException('SESSION_CLOSED');
     }
@@ -193,6 +199,13 @@ export class ContentPlanSessionService {
     if (body.answers && latest) {
       this._contentPlanService.resolveAnswers(latest.questions, body.answers);
     }
+    if (body.options !== undefined && !kind.parseProposeOptions) {
+      throw new InvalidPlanException([
+        { path: 'options', message: 'this kind takes no options here' },
+      ]);
+    }
+    const options =
+      body.options !== undefined ? kind.parseProposeOptions?.(body.options, session) : undefined;
     await this.claim(session.id, 'proposal');
     try {
       if (body.answers && latest) {
@@ -200,6 +213,7 @@ export class ContentPlanSessionService {
       }
       await this._sessionRepository.update(session.id, {
         summary: body.summary,
+        ...(options ? { options } : {}),
         status: 'PROPOSING',
         notice: null,
       });
@@ -306,12 +320,14 @@ export class ContentPlanSessionService {
     }
     const kind = this.kindOf(session);
     const earlier = feedback ? storedTurns(session.proposalTurns) : [];
-    const draft = await this._contentPlanService.charge(
-      session.organizationId,
-      session.planId,
-      kind.proposalAction,
-      () => kind.buildProposal(session, earlier, feedback)
-    );
+    const draft = kind.proposalAction
+      ? await this._contentPlanService.charge(
+          session.organizationId,
+          session.planId,
+          kind.proposalAction,
+          () => kind.buildProposal(session, earlier, feedback)
+        )
+      : await kind.buildProposal(session, earlier, feedback);
     const saved = await this._sessionRepository.saveProposal(session.id, {
       proposal: draft.proposal,
       proposalVersion: session.proposalVersion + 1,
@@ -409,7 +425,7 @@ export class ContentPlanSessionService {
       (item, index): PlanSessionRoundView => ({
         id: item.id,
         index: item.index,
-        summary: this.summaryOf(item, rounds[index + 1], session),
+        summary: this.summaryOf(item, rounds[index + 1], session, kind),
         questions: item.questions as unknown as PlanQuestion[],
         answers: (item.answers as unknown as PlanAnswer[] | null) ?? null,
         readyForPlan: item.readyForPlan,
@@ -435,21 +451,13 @@ export class ContentPlanSessionService {
     };
   }
 
-  // The summary of a round as the owner left it: the edit the owner sent with the answers (kept in the next round's
-  // first turn), or for the latest round the session's summary, which holds the owner's last edit.
+  // The summary of a round as the owner left it (see `roundSummary`); the latest round's is the session's own.
   private summaryOf(
     round: { summary: string },
     next: { userTurn: string } | undefined,
-    session: PlanSession
+    session: PlanSession,
+    kind: PlanSessionKind
   ) {
-    if (!next) {
-      return session.summary ?? round.summary;
-    }
-    try {
-      const edited = JSON.parse(next.userTurn)?.editedSummary;
-      return typeof edited === 'string' && edited ? edited : round.summary;
-    } catch {
-      return round.summary;
-    }
+    return roundSummary(round, next, session.summary, kind.editedKey ?? EDITED_KEY);
   }
 }

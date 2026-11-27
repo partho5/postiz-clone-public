@@ -211,7 +211,8 @@ const build = (generatorOverrides: Record<string, any> = {}) => {
     planRepository as any,
     generator as any,
     { spend } as any,
-    temporal as any
+    temporal as any,
+    repository as any
   );
   const kind = buildKind();
   kind.planOf.mockImplementation(async () => planRepository.ensure() as any);
@@ -553,6 +554,51 @@ describe('ContentPlanSessionService propose', () => {
     expect(view.status).toBe('PROPOSED');
     expect(view.proposalVersion).toBe(1);
     expect(view.proposal).toEqual({ shown: ['We bake sourdough', null] });
+  });
+
+  it('charges nothing outside a kind that books each of its AI calls itself', async () => {
+    const ctx = await withRound(build());
+    (ctx.kind as any).proposalAction = undefined;
+    await ctx.service.propose(org(), 'session-1', { summary: 'We bake sourdough' });
+    ctx.spend.mockClear();
+    await ctx.service.buildProposal('session-1', null);
+    expect(ctx.kind.buildProposal).toHaveBeenCalledTimes(1);
+    expect(ctx.spend).not.toHaveBeenCalled();
+    expect(ctx.repository.sessions[0]).toMatchObject({ status: 'PROPOSED', proposalVersion: 1 });
+  });
+
+  it('keeps the owner edit of the summary under the key the kind names, in the turn and in the rounds', async () => {
+    const ctx = await withRound(build());
+    (ctx.kind as any).editedKey = 'editedDirection';
+    await ctx.service.answer(org(), 'session-1', {
+      roundId: 'round-0',
+      summary: 'We bake sourdough for locals',
+      answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
+    });
+    const turn = ctx.generator.chatRound.mock.calls[1][1].newUserTurn;
+    expect(JSON.parse(turn)).toEqual({
+      answers: [{ question: 'Who watches?', answer: 'Locals' }],
+      editedDirection: 'We bake sourdough for locals',
+    });
+    expect((await ctx.service.view(org(), 'session-1')).rounds[0].summary).toBe(
+      'We bake sourdough for locals'
+    );
+  });
+
+  it('merges the options sent with a proposal request through the kind, and refuses them for a kind that takes none', async () => {
+    const none = await withRound(build());
+    expect(
+      await codeOf(none.service.propose(org(), 'session-1', { summary: 's', options: { count: 2 } }))
+    ).toBe('INVALID_PLAN');
+    expect(none.repository.sessions[0].busy).toBeNull();
+    const ctx = await withRound(build());
+    (ctx.kind as any).parseProposeOptions = jest.fn((options: any, session: any) => ({
+      ...session.options,
+      ...options,
+    }));
+    const view = await ctx.service.propose(org(), 'session-1', { summary: 's', options: { count: 2 } });
+    expect(view.options).toEqual({ count: 2 });
+    expect((ctx.kind as any).parseProposeOptions).toHaveBeenCalledTimes(1);
   });
 
   it('does not write for a session that is no longer PROPOSING', async () => {

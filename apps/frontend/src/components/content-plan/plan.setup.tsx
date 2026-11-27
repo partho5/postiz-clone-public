@@ -16,38 +16,51 @@ import {
 } from '@gitroom/frontend/components/content-plan/plan.parts';
 import { PlanRoundForm } from '@gitroom/frontend/components/content-plan/plan.round.form';
 import { PlanStepNav } from '@gitroom/frontend/components/content-plan/plan.steps';
-import { usePlanRequest } from '@gitroom/frontend/components/content-plan/use.plan.request';
+import { usePlanSessionRequest } from '@gitroom/frontend/components/content-plan/use.plan.session.request';
 import { CONTENT_PLAN_KEY } from '@gitroom/frontend/components/content-plan/use.content.plan';
 import {
   DEFAULT_VIDEOS_PER_WEEK,
   LIMITS,
+  PLAN_SESSION_KIND,
   PlanAnswer,
-  PlanRoundView,
+  PlanSessionRoundView,
+  PlanSessionView,
+  PlanSetupOptions,
   PlanView,
   VIDEOS_PER_WEEK,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
 
 // The first step: one big text about the business, and the button that starts the questions. Gone back to, it shows the
-// text and goes on without asking again when nothing changed.
-export const PlanStartStep: FC<{ plan: PlanView; nav: PlanStepNav }> = ({
-  plan,
-  nav,
-}) => {
+// text and goes on without asking again when nothing changed. `session` is the plan's open session, null before there is one;
+// `onStarted` gets the id of the session a start made.
+export const PlanStartStep: FC<{
+  plan: PlanView;
+  session: PlanSessionView | null;
+  nav: PlanStepNav;
+  onStarted: (id: string) => void;
+}> = ({ plan, session, nav, onStarted }) => {
   const t = useT();
-  const { send, pending } = usePlanRequest();
+  const { start: open, pending } = usePlanSessionRequest();
   const { mutate } = useSWRConfig();
-  const [sourceText, setSourceText] = useState(plan.sourceText ?? plan.prefill);
-  const working = pending || !!plan.busy;
-  const started = plan.rounds.length > 0;
-  const changed = started && sourceText.trim() !== (plan.sourceText ?? '').trim();
+  const [sourceText, setSourceText] = useState(
+    session?.sourceText ?? plan.sourceText ?? plan.prefill
+  );
+  const working = pending || !!session?.busy || session?.status === 'PROPOSING';
+  const started = !!session && session.rounds.length > 0;
+  const changed =
+    started && sourceText.trim() !== (session?.sourceText ?? '').trim();
 
   const start = useCallback(async () => {
-    if (!(await send('POST', '/content-plan/setup/start', {
+    const view = await open({
+      kind: PLAN_SESSION_KIND,
       sourceText: sourceText.trim(),
-    }))) {
+    });
+    if (view) {
+      onStarted(view.id);
+    } else {
       await mutate(CONTENT_PLAN_KEY);
     }
-  }, [mutate, send, sourceText]);
+  }, [mutate, onStarted, open, sourceText]);
 
   if (!plan.canEdit) {
     return (
@@ -107,67 +120,61 @@ export const PlanStartStep: FC<{ plan: PlanView; nav: PlanStepNav }> = ({
 // itself is the shared `PlanRoundForm`; this adds what only the setup has: the videos per week and the calls it makes.
 export const PlanRoundStep: FC<{
   plan: PlanView;
-  round: PlanRoundView;
+  session: PlanSessionView;
+  round: PlanSessionRoundView;
   nav: PlanStepNav;
-}> = ({ plan, round, nav }) => {
+}> = ({ plan, session, round, nav }) => {
   const t = useT();
-  const { send, pending } = usePlanRequest();
-  const { mutate } = useSWRConfig();
-  const isLatest = round.id === plan.round?.id;
+  const { act, pending } = usePlanSessionRequest();
+  const isLatest = round.id === session.round?.id;
+  const chosen = (session.options as Partial<PlanSetupOptions> | null)?.videosPerWeek;
   const [videosPerWeek, setVideosPerWeek] = useState<number>(
-    plan.videosPerWeek || DEFAULT_VIDEOS_PER_WEEK
+    chosen || plan.videosPerWeek || DEFAULT_VIDEOS_PER_WEEK
   );
   const [writingPlan, setWritingPlan] = useState(false);
-  const working = pending || !!plan.busy;
-  const disabled = working || !plan.canEdit;
+  const proposing = session.status === 'PROPOSING';
+  const working = pending || !!session.busy || proposing;
+  const disabled = working || !session.canEdit;
 
   const next = useCallback(
-    async (direction: string, answers: PlanAnswer[]) => {
+    async (summary: string, answers: PlanAnswer[]) => {
       setWritingPlan(false);
-      if (
-        !(await send('POST', '/content-plan/setup/answer', {
-          roundId: round.id,
-          direction,
-          answers,
-        }))
-      ) {
-        await mutate(CONTENT_PLAN_KEY);
-      }
+      await act(session.id, 'answer', { roundId: round.id, summary, answers });
     },
-    [mutate, round.id, send]
+    [act, round.id, session.id]
   );
 
   const showPlan = useCallback(
-    async (direction: string, answers: PlanAnswer[]) => {
+    async (summary: string, answers: PlanAnswer[]) => {
       setWritingPlan(true);
-      const answer = await send('POST', '/content-plan/proposal', {
-        direction,
-        videosPerWeek,
+      const answer = await act(session.id, 'propose', {
+        summary,
         answers,
+        options: { videosPerWeek },
       });
       if (answer) {
         nav.next?.();
       }
     },
-    [nav, send, videosPerWeek]
+    [act, nav, session.id, videosPerWeek]
   );
 
   return (
     <PlanRoundForm
       round={round}
-      summary={round.direction}
+      summary={round.summary}
       summaryName={`planDirection${round.index}`}
       summaryMax={LIMITS.direction}
       resultLabel={t('plan_show_plan', 'Show me the plan')}
       isLatest={isLatest}
-      canEdit={plan.canEdit}
+      canEdit={session.canEdit}
       busy={working}
       nav={nav}
       onContinue={next}
       onResult={showPlan}
-      extrasChanged={videosPerWeek !== plan.videosPerWeek}
+      extrasChanged={videosPerWeek !== (chosen ?? plan.videosPerWeek)}
       failure={
-        plan.notice === 'proposal_failed' && isLatest ? (
+        session.notice === 'proposal_failed' && isLatest ? (
           <PlanFailed
             text={t(
               'plan_proposal_failed',
@@ -205,9 +212,7 @@ export const PlanRoundStep: FC<{
         )
       }
       thinking={
-        <PlanThinking
-          kind={writingPlan || plan.busy === 'proposal' ? 'proposal' : 'round'}
-        />
+        <PlanThinking kind={writingPlan || proposing ? 'proposal' : 'round'} />
       }
     />
   );

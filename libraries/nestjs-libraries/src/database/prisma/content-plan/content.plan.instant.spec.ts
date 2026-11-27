@@ -16,6 +16,10 @@ jest.mock(
   () => ({ ContentPlanRepository: class {} })
 );
 jest.mock(
+  '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.repository',
+  () => ({ ContentPlanSessionRepository: class {} })
+);
+jest.mock(
   '@gitroom/nestjs-libraries/database/prisma/credits/credits.service',
   () => ({ CreditsService: class {} })
 );
@@ -144,8 +148,6 @@ class FakeRepository {
     };
 
   findByOrganization = async (id: string) => (id === ORG ? this.plan : null);
-  rounds = async () => [];
-  latestRound = async () => null;
   activeThemes = async () => [];
   lastWeek = async () => this.sorted().slice(-1)[0] ?? null;
   update = async (_id: string, data: any) => {
@@ -294,7 +296,8 @@ const build = () => {
     repository as any,
     generator as any,
     { spend } as any,
-    temporal as any
+    temporal as any,
+    { findOpen: async () => null, rounds: async () => [] } as any
   );
   return { service, repository, generator, ledger, start };
 };

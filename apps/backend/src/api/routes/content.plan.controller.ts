@@ -19,6 +19,7 @@ import {
   ContentPlanService,
   PlanOrganization,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
+import { ContentPlanSetupService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.setup.service';
 import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.service';
 import {
   PlanDayView,
@@ -35,10 +36,12 @@ import {
 @ApiTags('Content plan')
 @Controller('/content-plan')
 export class ContentPlanController {
-  // Receives the service that owns the content plan and the one that runs its planning sessions.
+  // Receives the service that owns the content plan, the one that runs its planning sessions and the one the setup's own
+  // routes call (they run the plan's session).
   constructor(
     private _contentPlanService: ContentPlanService,
-    private _contentPlanSessionService: ContentPlanSessionService
+    private _contentPlanSessionService: ContentPlanSessionService,
+    private _contentPlanSetupService: ContentPlanSetupService
   ) {}
 
   // The plan of the calling workspace; status NONE when it has none.
@@ -55,7 +58,7 @@ export class ContentPlanController {
     @Body() body: unknown
   ): Promise<PlanView> {
     this.assertAdmin(org);
-    return this._contentPlanService.startSetup(org, body);
+    return this._contentPlanSetupService.startSetup(org, body);
   }
 
   // Sends the answers and the edited direction of a round and answers the next one; admins only.
@@ -66,7 +69,7 @@ export class ContentPlanController {
     @Body() body: unknown
   ): Promise<PlanView> {
     this.assertAdmin(org);
-    return this._contentPlanService.answer(org, body);
+    return this._contentPlanSetupService.answer(org, body);
   }
 
   // Starts writing the proposal; the page polls the plan until it is PROPOSED; admins only.
@@ -77,7 +80,7 @@ export class ContentPlanController {
     @Body() body: unknown
   ): Promise<PlanView> {
     this.assertAdmin(org);
-    return this._contentPlanService.propose(org, body);
+    return this._contentPlanSetupService.propose(org, body);
   }
 
   // Starts writing a new proposal from the owner's feedback; admins only.
@@ -88,7 +91,7 @@ export class ContentPlanController {
     @Body() body: unknown
   ): Promise<PlanView> {
     this.assertAdmin(org);
-    return this._contentPlanService.revise(org, body);
+    return this._contentPlanSetupService.revise(org, body);
   }
 
   // Makes the proposal the plan; admins only.
@@ -99,7 +102,7 @@ export class ContentPlanController {
     @Body() body: unknown
   ): Promise<PlanView> {
     this.assertAdmin(org);
-    return this._contentPlanService.confirm(org, body);
+    return this._contentPlanSetupService.confirm(org, body);
   }
 
   // Back to a fresh setup; the current week stays until a new plan is confirmed; admins only.
@@ -107,7 +110,7 @@ export class ContentPlanController {
   @HttpCode(200)
   reset(@GetOrgFromRequest() org: PlanOrganization): Promise<PlanView> {
     this.assertAdmin(org);
-    return this._contentPlanService.reset(org);
+    return this._contentPlanSetupService.reset(org);
   }
 
   // Saves the facts about the business the owner edited; admins only.

@@ -6,6 +6,7 @@ import {
   ContentPlanService,
   PlanJob,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.service';
+import { ContentPlanSetupService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.setup.service';
 import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.service';
 
 @Injectable()
@@ -13,7 +14,8 @@ import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/pr
 export class ContentPlanActivity {
   constructor(
     private _contentPlanService: ContentPlanService,
-    private _contentPlanSessionService: ContentPlanSessionService
+    private _contentPlanSessionService: ContentPlanSessionService,
+    private _contentPlanSetupService: ContentPlanSetupService
   ) {}
 
   // Advances every ACTIVE plan: leftovers carried on, the week written, the roadmap topped up.
@@ -22,15 +24,16 @@ export class ContentPlanActivity {
     return this._contentPlanService.tick(new Date());
   }
 
-  // Runs one job: the proposal or its revision (of the plan or of a session), a week, some days or one day of a week, a
+  // Runs one job: the proposal or its revision (of a session; `proposal` and `revise` are jobs queued before the setup became
+  // a session, which carry the plan id and are run on the plan's session), a week, some days or one day of a week, a
   // replan of the roadmap, or the refining of an instant idea.
   @ActivityMethod()
   async contentPlanRunJob(job: PlanJob) {
     switch (job.kind) {
       case 'proposal':
-        return this._contentPlanService.buildProposal(job.id, null);
+        return this._contentPlanSetupService.buildProposal(job.id, null);
       case 'revise':
-        return this._contentPlanService.buildProposal(job.id, job.feedback ?? null);
+        return this._contentPlanSetupService.buildProposal(job.id, job.feedback ?? null);
       case 'week':
         return this._contentPlanService.generateWeek(job.id);
       case 'days':
@@ -54,7 +57,7 @@ export class ContentPlanActivity {
     switch (kind) {
       case 'proposal':
       case 'revise':
-        return this._contentPlanService.proposalFailed(id);
+        return this._contentPlanSetupService.proposalFailed(id);
       case 'week':
         return this._contentPlanService.weekFailed(id);
       case 'days':

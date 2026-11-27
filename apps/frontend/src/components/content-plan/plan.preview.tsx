@@ -3,6 +3,7 @@
 // Content plan: the proposal. The owner reads the direction, the facts, the themes and the first weeks, then confirms
 // the whole plan or says what is not right (which writes a new proposal).
 import React, { FC, useCallback, useState } from 'react';
+import { useSWRConfig } from 'swr';
 import { Button } from '@gitroom/react/form/button';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -16,13 +17,16 @@ import {
   PlanThinking,
   planWeekRange,
 } from '@gitroom/frontend/components/content-plan/plan.parts';
-import { usePlanRequest } from '@gitroom/frontend/components/content-plan/use.plan.request';
+import { CONTENT_PLAN_KEY } from '@gitroom/frontend/components/content-plan/use.content.plan';
+import { usePlanSessionRequest } from '@gitroom/frontend/components/content-plan/use.plan.session.request';
 import {
+  DEFAULT_VIDEOS_PER_WEEK,
   LIMITS,
   PREVIEW_WEEKS,
   PlanFacts,
   PlanProposal,
-  PlanView,
+  PlanSessionView,
+  PlanSetupOptions,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
 
 // One fact of the "About your business" block; nothing when it is empty.
@@ -89,45 +93,53 @@ const PlanWeekCard: FC<{ week: PlanProposal['weeks'][number] }> = ({ week }) => 
 );
 
 // The proposal page. A plan that is being written again shows "Thinking…" in place of the proposal.
-export const PlanPreview: FC<{ plan: PlanView; onBack?: () => void }> = ({
-  plan,
+export const PlanPreview: FC<{ session: PlanSessionView; onBack?: () => void }> = ({
+  session,
   onBack,
 }) => {
   const t = useT();
-  const { send, pending } = usePlanRequest();
+  const { act, pending } = usePlanSessionRequest();
+  const { mutate } = useSWRConfig();
   const [asking, setAsking] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const { proposal } = plan;
-  const working = pending || !!plan.busy;
-  const canEdit = plan.canEdit;
+  const proposal = session.proposal as PlanProposal | null;
+  const videosPerWeek =
+    (session.options as Partial<PlanSetupOptions> | null)?.videosPerWeek ??
+    DEFAULT_VIDEOS_PER_WEEK;
+  const working = pending || !!session.busy || session.status === 'PROPOSING';
+  const canEdit = session.canEdit;
 
-  const confirm = useCallback(() => {
+  const confirm = useCallback(async () => {
     if (!proposal) {
       return;
     }
-    return send('POST', '/content-plan/confirm', {
+    const answer = await act(session.id, 'confirm', {
       proposalVersion: proposal.version,
     });
-  }, [proposal, send]);
+    if (answer) {
+      // the plan is ACTIVE now: the page reads it again and shows the running plan
+      await mutate(CONTENT_PLAN_KEY);
+    }
+  }, [act, mutate, proposal, session.id]);
 
   const revise = useCallback(async () => {
     if (!proposal) {
       return;
     }
-    const answer = await send('POST', '/content-plan/proposal/revise', {
+    const answer = await act(session.id, 'revise', {
       proposalVersion: proposal.version,
       feedback: feedback.trim(),
     });
     if (answer) {
       setAsking(false);
     }
-  }, [feedback, proposal, send]);
+  }, [act, feedback, proposal, session.id]);
 
   if (!proposal) {
     return working ? <PlanThinking kind="proposal" /> : null;
   }
 
-  const failed = plan.notice === 'proposal_failed';
+  const failed = session.notice === 'proposal_failed';
   const previewWeeks = proposal.weeks.slice(0, PREVIEW_WEEKS);
   const laterWeeks = proposal.weeks.slice(PREVIEW_WEEKS);
 
@@ -135,12 +147,12 @@ export const PlanPreview: FC<{ plan: PlanView; onBack?: () => void }> = ({
     <div className="flex flex-col gap-[16px]">
       <PlanSection title={t('plan_understood', "Here's what I understood")}>
         <div dir="auto" className="whitespace-pre-line break-words">
-          {plan.direction}
+          {session.summary}
         </div>
         <div className="text-newTextColor/70">
           {t('plan_videos_a_week', {
             defaultValue: '{{videos}} videos a week',
-            videos: plan.videosPerWeek,
+            videos: videosPerWeek,
           })}
         </div>
       </PlanSection>

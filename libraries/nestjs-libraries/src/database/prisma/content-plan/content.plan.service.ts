@@ -1,9 +1,8 @@
-// Content plan: a brand's setup and proposal. The owner explains the business, answers the AI's rounds of questions,
-// reads the proposed plan (facts, themes, 12 weeks, an outline for the first 4) and confirms it, which makes the plan
-// ACTIVE. The rounds are an append-only chat so Meta's prompt cache can match their start; the proposal is written by a
-// job (a workflow) because it takes several AI calls. Every AI call goes through `CreditsService.spend` on a price-0
-// action. The weekly engine (the hourly tick, the week and day writers, the roadmap) is here too, and the change
-// routes build on it.
+// Content plan: a brand's plan. Its setup (the owner explains the business, answers the AI's rounds of questions, reads the
+// proposed plan and confirms it) is the `plan` session kind of the planning engine; this service draws the plan with that
+// session's rounds and proposal, and holds what the sessions share (the brand context, the charge of an AI call, the start
+// of a job, the answers). Every AI call goes through `CreditsService.spend` on a price-0 action. The weekly engine (the
+// hourly tick, the week and day writers, the roadmap) is here too, and the change routes build on it.
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import {
   ContentPlan,
@@ -39,6 +38,7 @@ import {
   PlanWithOrganization,
   WeekForWrite,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.repository';
+import { ContentPlanSessionRepository } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.repository';
 import {
   addDays,
   brandContextMessage,
@@ -48,9 +48,8 @@ import {
   mergeCarry,
   nextClusterId,
   pickAngles,
-  rotationOrder,
+  roundSummary,
   slotsForWeek,
-  stableJson,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
 import {
   BRAND_DEFAULT_LOCALE,
@@ -60,10 +59,8 @@ import {
 import {
   Angle,
   ANGLES,
-  AnswerSetupSchema,
   BriefSchema,
   CARRY_MAX,
-  ConfirmSchema,
   DEFAULT_VIDEOS_PER_WEEK,
   DirectionSchema,
   FactsSchema,
@@ -73,6 +70,8 @@ import {
   PhoneDayView,
   PhoneWeekStamp,
   PhoneWeekView,
+  PLAN_SESSION_EDIT_KEY,
+  PLAN_SESSION_KIND,
   PlanAnswer,
   PlanBeat,
   PlanCarryItem,
@@ -82,14 +81,11 @@ import {
   PlanOutlineItem,
   PlanProposal,
   PlanQuestion,
+  PlanSetupOptions,
   PlanUpcomingView,
   PlanView,
   PlanWeekView,
-  PREVIEW_WEEKS,
-  ProposeSchema,
-  ReviseSchema,
   ROADMAP_WEEKS,
-  StartSetupSchema,
   UrgentSchema,
   VideosPerWeekSchema,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
@@ -98,8 +94,9 @@ import { organizationId as organizationKey } from '@gitroom/nestjs-libraries/tem
 // The workspace the caller is in, with the caller's membership as the request middleware loads it.
 export type PlanOrganization = Organization & { users?: { role: Role }[] };
 
-// What a plan job is asked to do: `id` is the plan (proposal, revise, replan), the week (week, days), the day (day), the
-// instant idea (instant) or the session (session_proposal, session_revise).
+// What a plan job is asked to do: `id` is the plan (proposal, revise: jobs queued before the setup moved onto sessions,
+// and replan), the week (week, days), the day (day), the instant idea (instant) or the session (session_proposal,
+// session_revise).
 // `feedback` is the owner's words of a revise; `fromDate` is the first date `days` writes again.
 export interface PlanJob {
   kind:
@@ -201,17 +198,19 @@ const IDEAS_PER_CALL = ROADMAP_WEEKS;
 // Earlier ideas of a cluster given to the model so a new one does not repeat them.
 const PREVIOUS_IDEAS = 3;
 
-// The setup, the proposal and the weekly engine of a brand's content plan.
+// The plan as the page draws it, and the weekly engine of a brand's content plan.
 @Injectable()
 export class ContentPlanService {
   private readonly _logger = new Logger(ContentPlanService.name);
 
-  // Receives the storage, the writer of the AI calls, the credit engine and the workflow engine.
+  // Receives the storage, the writer of the AI calls, the credit engine, the workflow engine and the storage of the
+  // sessions (the setup's rounds and proposal are those of its session).
   constructor(
     private _contentPlanRepository: ContentPlanRepository,
     private _contentPlanGenerator: ContentPlanGenerator,
     private _creditsService: CreditsService,
-    private _temporalService: TemporalService
+    private _temporalService: TemporalService,
+    private _sessionRepository: ContentPlanSessionRepository
   ) {}
 
   // The plan the page draws: its status (NONE when the workspace has none), the current round or proposal and what the
@@ -223,233 +222,6 @@ export class ContentPlanService {
     );
   }
 
-  // Starts a setup from the owner's first text and answers the first round. A plan that is already ACTIVE is refused:
-  // starting over goes through `reset`.
-  async startSetup(org: PlanOrganization, input: unknown): Promise<PlanView> {
-    const body = this.parse(StartSetupSchema, input);
-    if ((await this._contentPlanRepository.findByOrganization(org.id))?.status === 'ACTIVE') {
-      throw new PlanConflictException('PLAN_EXISTS');
-    }
-    const plan = await this._contentPlanRepository.ensure(org.id);
-    await this.claim(plan.id, 'round');
-    try {
-      await this._contentPlanRepository.resetSetup(plan.id, {
-        sourceText: body.sourceText,
-      });
-      await this.writeRound(org, plan.id, 0, [], stableJson({ sourceText: body.sourceText }));
-    } catch (err) {
-      throw this.aiError(err);
-    } finally {
-      await this._contentPlanRepository.release(plan.id);
-    }
-    return this.view(org);
-  }
-
-  // Saves the answers and the owner's edit of the direction, then writes the next round from the whole chat so far.
-  // The round may be an earlier one (the owner went back and changed it): the rounds after it, and a proposal written
-  // from them, are dropped first, because they were written from the old answers.
-  async answer(org: PlanOrganization, input: unknown): Promise<PlanView> {
-    const body = this.parse(AnswerSetupSchema, input);
-    const plan = await this._contentPlanRepository.findByOrganization(org.id);
-    if (!plan) {
-      throw new PlanNotFoundException();
-    }
-    const all = await this._contentPlanRepository.rounds(plan.id);
-    const position = all.findIndex((round) => round.id === body.roundId);
-    if (!['SETUP', 'PROPOSED'].includes(plan.status) || position < 0) {
-      throw new PlanConflictException('ROUND_STALE');
-    }
-    const rounds = all.slice(0, position + 1);
-    const latest = rounds[position];
-    const answers = this.resolveAnswers(latest.questions, body.answers);
-    await this.claim(plan.id, 'round');
-    try {
-      // read again now the plan is held: a plan confirmed since the first read is not taken back
-      const held = await this._contentPlanRepository.findByOrganization(org.id);
-      if (!held || !['SETUP', 'PROPOSED'].includes(held.status)) {
-        throw new PlanConflictException('ROUND_STALE');
-      }
-      // Going back to an earlier round (or to the last one after the proposal) changes what the later rounds and the
-      // proposal were written from, so they are dropped, but only once the AI has written the new round: a failed
-      // call leaves the plan as it was.
-      const rewinding = held.status === 'PROPOSED' || position < all.length - 1;
-      const save = async () => {
-        if (rewinding) {
-          await this._contentPlanRepository.rewindTo(plan.id, latest.index);
-        }
-        await this._contentPlanRepository.saveAnswers(plan.id, latest.id, body.answers);
-        // the owner's edit wins, and is saved before the AI is asked again
-        await this._contentPlanRepository.update(plan.id, { direction: body.direction });
-      };
-      if (!rewinding) {
-        await save();
-      }
-      const turns = rounds.flatMap((round): ChatTurn[] => [
-        { role: 'user', content: round.userTurn },
-        { role: 'assistant', content: round.assistantTurn },
-      ]);
-      const editedDirection =
-        body.direction.trim() === latest.direction.trim() ? null : body.direction;
-      await this.writeRound(
-        org,
-        plan.id,
-        latest.index + 1,
-        turns,
-        stableJson({ answers, editedDirection }),
-        rewinding ? save : undefined
-      );
-    } catch (err) {
-      throw this.aiError(err);
-    } finally {
-      await this._contentPlanRepository.release(plan.id);
-    }
-    return this.view(org);
-  }
-
-  // Stores the direction, the videos per week and the answers of the last round, and starts the job that writes the
-  // proposal. The page polls until the plan is PROPOSED.
-  async propose(org: PlanOrganization, input: unknown): Promise<PlanView> {
-    const body = this.parse(ProposeSchema, input);
-    const plan = await this._contentPlanRepository.findByOrganization(org.id);
-    if (!plan) {
-      throw new PlanNotFoundException();
-    }
-    if (plan.status === 'ACTIVE') {
-      throw new PlanConflictException('PLAN_EXISTS');
-    }
-    const latest = await this._contentPlanRepository.latestRound(plan.id);
-    if (body.answers && !latest) {
-      throw new PlanConflictException('ROUND_STALE');
-    }
-    if (body.answers && latest) {
-      this.resolveAnswers(latest.questions, body.answers);
-    }
-    await this.claim(plan.id, 'proposal');
-    try {
-      if (body.answers && latest) {
-        await this._contentPlanRepository.saveAnswers(plan.id, latest.id, body.answers);
-      }
-      await this._contentPlanRepository.update(plan.id, {
-        direction: body.direction,
-        videosPerWeek: body.videosPerWeek,
-        notice: null,
-      });
-    } catch (err) {
-      await this._contentPlanRepository.release(plan.id);
-      throw err;
-    }
-    await this.startJob({ kind: 'proposal', id: plan.id }, org.id, plan.id);
-    return this.view(org);
-  }
-
-  // Asks for a new proposal after the owner's feedback, as the next turn of the proposal chat. 409 when the owner
-  // answers a proposal that is no longer the latest.
-  async revise(org: PlanOrganization, input: unknown): Promise<PlanView> {
-    const body = this.parse(ReviseSchema, input);
-    const plan = await this._contentPlanRepository.findByOrganization(org.id);
-    if (!plan) {
-      throw new PlanNotFoundException();
-    }
-    if (plan.status !== 'PROPOSED' || plan.proposalVersion !== body.proposalVersion) {
-      throw new PlanConflictException('PROPOSAL_STALE');
-    }
-    await this.claim(plan.id, 'proposal');
-    try {
-      await this._contentPlanRepository.update(plan.id, { notice: null });
-    } catch (err) {
-      await this._contentPlanRepository.release(plan.id);
-      throw err;
-    }
-    await this.startJob(
-      { kind: 'revise', id: plan.id, feedback: body.feedback },
-      org.id,
-      plan.id
-    );
-    return this.view(org);
-  }
-
-  // Makes the proposal the plan: themes, clusters in rotation order and the 12 weeks, the first of them starting
-  // today (or the day after the week still running). The first week is written right away by a job; when that cannot
-  // be started the hourly tick writes it.
-  async confirm(org: PlanOrganization, input: unknown): Promise<PlanView> {
-    const body = this.parse(ConfirmSchema, input);
-    const plan = await this._contentPlanRepository.findByOrganization(org.id);
-    if (!plan) {
-      throw new PlanNotFoundException();
-    }
-    const proposal = plan.proposal as unknown as PlanProposal | null;
-    if (
-      plan.status !== 'PROPOSED' ||
-      !proposal ||
-      plan.proposalVersion !== body.proposalVersion
-    ) {
-      throw new PlanConflictException('PROPOSAL_STALE');
-    }
-    if (plan.busy) {
-      throw new PlanConflictException('PLAN_BUSY');
-    }
-    const today = this.today(org);
-    const firstStart = await this.firstWeekStart(plan.id, today);
-    const themeIds = new Map(proposal.themes.map((theme) => [theme.ref, randomUUID()]));
-    const clusterIds = new Map(
-      proposal.clusters.map((cluster) => [cluster.ref, randomUUID()])
-    );
-    const rotation = this.rotationOf(proposal);
-    const weeks = proposal.weeks.map((week, index) => {
-      const clusterId = clusterIds.get(week.clusterRef);
-      if (!clusterId) {
-        throw new Error(`The proposal week ${index} has an unknown cluster`);
-      }
-      return {
-        id: randomUUID(),
-        clusterId,
-        weekStart: addDays(firstStart, index * 7),
-        idea: week.idea,
-        outline: week.outline,
-      };
-    });
-    await this._contentPlanRepository.activate({
-      planId: plan.id,
-      // a week of the old plan that was never written and has started or is still to come
-      removeIdleFrom: addDays(today, -6),
-      themes: proposal.themes.map((theme, index) => ({
-        id: themeIds.get(theme.ref) as string,
-        name: theme.name,
-        description: theme.description,
-        position: index,
-      })),
-      clusters: proposal.clusters.map((cluster) => ({
-        id: clusterIds.get(cluster.ref) as string,
-        themeId: themeIds.get(cluster.themeRef) as string,
-        title: cluster.title,
-        problem: cluster.problem,
-        rotationIndex: rotation.indexOf(cluster.ref),
-      })),
-      weeks,
-      facts: proposal.facts as unknown as Prisma.InputJsonValue,
-    });
-    if (weeks[0] && weeks[0].weekStart === today) {
-      try {
-        await this.startJob({ kind: 'week', id: weeks[0].id }, org.id, null);
-      } catch (err) {
-        // the plan is already confirmed; the hourly tick writes the week
-        this._logger.warn(
-          `content plan: first week job not started plan=${plan.id} error=${
-            (err as Error)?.name ?? 'unknown'
-          }`
-        );
-      }
-    }
-    return this.view(org);
-  }
-
-  // Back to a fresh setup. The weeks are kept, so the phone keeps the current one until a new plan is confirmed.
-  async reset(org: PlanOrganization): Promise<PlanView> {
-    const plan = await this._contentPlanRepository.ensure(org.id);
-    await this._contentPlanRepository.resetSetup(plan.id, { busy: null });
-    return this.view(org);
-  }
-
   // Saves the facts about the business the owner edited: into the plan, or into the proposal being read.
   async saveFacts(org: PlanOrganization, input: unknown): Promise<PlanView> {
     const { facts } = this.parse(FactsSchema, input);
@@ -457,21 +229,26 @@ export class ContentPlanService {
     if (!plan) {
       throw new PlanNotFoundException();
     }
-    if (plan.busy) {
-      throw new PlanConflictException('PLAN_BUSY');
-    }
-    const proposal = plan.proposal as unknown as PlanProposal | null;
     if (plan.status === 'ACTIVE') {
+      if (plan.busy) {
+        throw new PlanConflictException('PLAN_BUSY');
+      }
       await this._contentPlanRepository.update(plan.id, {
         facts: facts as unknown as Prisma.InputJsonValue,
       });
-    } else if (plan.status === 'PROPOSED' && proposal) {
-      await this._contentPlanRepository.update(plan.id, {
-        proposal: { ...proposal, facts } as unknown as Prisma.InputJsonValue,
-      });
-    } else {
+      return this.view(org);
+    }
+    const session = await this._sessionRepository.findOpen(org.id, PLAN_SESSION_KIND);
+    if (session?.busy) {
+      throw new PlanConflictException('PLAN_BUSY');
+    }
+    const proposal = session?.proposal as unknown as PlanProposal | null;
+    if (!session || session.status !== 'PROPOSED' || !proposal) {
       throw new PlanConflictException('PLAN_NOT_ACTIVE');
     }
+    await this._sessionRepository.update(session.id, {
+      proposal: { ...proposal, facts } as unknown as Prisma.InputJsonValue,
+    });
     return this.view(org);
   }
 
@@ -772,117 +549,6 @@ export class ContentPlanService {
       change?.instantCount,
     ];
     return { stamp: createHash('sha256').update(JSON.stringify(parts)).digest('hex') };
-  }
-
-  // The proposal job (called by the activity): the structure of the plan from the proposal chat, the ideas of the 12
-  // weeks, and an outline for each of the first weeks. `feedback` is the owner's words of a revise, sent as the next
-  // turn of the stored chat; without it the chat starts from the direction. A failure is thrown, and the job's failure
-  // path calls `proposalFailed`.
-  async buildProposal(planId: string, feedback: string | null) {
-    const plan = await this._contentPlanRepository.findWithOrganization(planId);
-    if (!plan) {
-      throw new PlanNotFoundException();
-    }
-    const { organization: org } = plan;
-    const direction = plan.direction;
-    if (!direction) {
-      throw new PlanAiFailed('The plan has no direction');
-    }
-    const locale = org.locale ?? BRAND_DEFAULT_LOCALE;
-    const name = displayName(org.name);
-    const earlier = feedback ? storedTurns(plan.proposalTurns) : [];
-    const newUserTurn = stableJson(feedback ? { feedback } : { direction });
-    const structure = await this.charge(org.id, plan.id, 'plan.proposal', () =>
-      this._contentPlanGenerator.proposeStructure({
-        orgId: org.id,
-        brandContext: this.setupContext(org),
-        turns: earlier,
-        newUserTurn,
-      })
-    );
-    const rotation = this.rotationOf(structure);
-    const today = this.today(org);
-    const firstStart = await this.firstWeekStart(plan.id, today);
-    const rows: { weekStart: string; clusterRef: string }[] = [];
-    let previous: string | null = null;
-    for (let index = 0; index < ROADMAP_WEEKS; index += 1) {
-      previous = nextClusterId(rotation, previous);
-      rows.push({ weekStart: addDays(firstStart, index * 7), clusterRef: previous });
-    }
-    const clusterOf = (ref: string) =>
-      structure.clusters.find((cluster) => cluster.ref === ref) ??
-      structure.clusters[0];
-    const context = {
-      orgId: org.id,
-      name,
-      locale,
-      direction,
-      facts: structure.facts,
-    };
-    const { ideas } = await this.charge(org.id, plan.id, 'plan.roadmap', () =>
-      this._contentPlanGenerator.writeIdeas({
-        ...context,
-        weeks: rows.map((row) => ({
-          weekStart: row.weekStart,
-          weekEnd: addDays(row.weekStart, 6),
-          clusterTitle: clusterOf(row.clusterRef).title,
-          problem: clusterOf(row.clusterRef).problem,
-          previousIdeas: [],
-        })),
-      })
-    );
-    const outlines: (PlanOutlineItem[] | null)[] = rows.map(() => null);
-    // one after another, so the calls of one brand share the cached start of the request
-    for (let index = 0; index < Math.min(PREVIEW_WEEKS, rows.length); index += 1) {
-      const cluster = clusterOf(rows[index].clusterRef);
-      const angles = pickAngles(plan.videosPerWeek, new Map(), [], false, index);
-      const { titles } = await this.charge(org.id, plan.id, 'plan.proposal', () =>
-        this._contentPlanGenerator.writeOutline({
-          ...context,
-          idea: ideas[index],
-          clusterTitle: cluster.title,
-          problem: cluster.problem,
-          angles,
-          videosPerWeek: plan.videosPerWeek,
-        })
-      );
-      outlines[index] = titles.map((title, position) => ({
-        title,
-        angle: angles[position],
-      }));
-    }
-    const version = plan.proposalVersion + 1;
-    const saved = await this._contentPlanRepository.saveProposal(plan.id, {
-      proposal: {
-        version,
-        facts: structure.facts,
-        themes: structure.themes,
-        clusters: structure.clusters,
-        weeks: rows.map((row, index) => ({
-          weekStart: row.weekStart,
-          clusterRef: row.clusterRef,
-          idea: ideas[index],
-          outline: outlines[index],
-        })),
-      },
-      proposalVersion: version,
-      proposalTurns: [
-        ...earlier,
-        { role: 'user', content: newUserTurn },
-        { role: 'assistant', content: structure.assistantTurn },
-      ],
-    });
-    if (!saved) {
-      // the plan was reset while the proposal was written: the answer is dropped
-      this._logger.log(`content plan: proposal dropped plan=${plan.id}`);
-    }
-  }
-
-  // The failure path of a proposal or revise job: the plan is free again and the owner is told it did not work.
-  proposalFailed(planId: string) {
-    return this._contentPlanRepository.release(planId, {
-      notice: 'proposal_failed',
-    });
   }
 
   // The instant idea job (called by the activity): the owner's idea refined into a script, saved on the draft, and the plan
@@ -1625,34 +1291,48 @@ export class ContentPlanService {
     return ideas;
   }
 
-  // The plan as the page draws it.
+  // The plan as the page draws it. A plan that is not ACTIVE shows its setup, which is its open `plan` session: the rounds,
+  // the proposal, the summary as the direction and the videos a week the owner chose.
   private async viewOf(
     org: PlanOrganization,
     plan: ContentPlan | null
   ): Promise<PlanView> {
+    const setup = !!plan && plan.status !== 'ACTIVE';
+    const session = setup
+      ? await this._sessionRepository.findOpen(org.id, PLAN_SESSION_KIND)
+      : null;
     const [rounds, themes, draft] = plan
       ? await Promise.all([
-          this._contentPlanRepository.rounds(plan.id),
+          session ? this._sessionRepository.rounds(session.id) : [],
           this._contentPlanRepository.activeThemes(plan.id),
           this._contentPlanRepository.openDraft(org.id),
         ])
       : [[], [], null];
     const round = rounds[rounds.length - 1] ?? null;
+    const proposed =
+      !!session?.proposal && ['PROPOSED', 'PROPOSING'].includes(session.status);
+    const options = session?.options as Partial<PlanSetupOptions> | null | undefined;
     return {
-      status: plan ? (plan.status as PlanView['status']) : 'NONE',
+      status: plan
+        ? setup
+          ? proposed
+            ? 'PROPOSED'
+            : 'SETUP'
+          : (plan.status as PlanView['status'])
+        : 'NONE',
       canEdit: canEditRole(org.users?.[0]?.role),
-      videosPerWeek: plan?.videosPerWeek ?? DEFAULT_VIDEOS_PER_WEEK,
+      videosPerWeek: options?.videosPerWeek ?? plan?.videosPerWeek ?? DEFAULT_VIDEOS_PER_WEEK,
       prefill: this.prefill(org),
-      sourceText: plan?.sourceText ?? null,
-      direction: plan?.direction ?? null,
+      sourceText: session?.sourceText ?? plan?.sourceText ?? null,
+      direction: session?.summary ?? plan?.direction ?? null,
       facts: (plan?.facts as unknown as PlanFacts | null) ?? null,
-      busy: plan?.busy ?? null,
-      notice: plan?.notice ?? null,
+      busy: setup ? session?.busy ?? null : plan?.busy ?? null,
+      notice: setup ? session?.notice ?? null : plan?.notice ?? null,
       round: round
         ? {
             id: round.id,
             index: round.index,
-            direction: round.direction,
+            direction: round.summary,
             questions: round.questions as unknown as PlanQuestion[],
             readyForPlan: round.readyForPlan,
           }
@@ -1660,37 +1340,21 @@ export class ContentPlanService {
       rounds: rounds.map((item, index) => ({
         id: item.id,
         index: item.index,
-        direction: this.directionOf(item, rounds[index + 1], plan),
+        direction: roundSummary(
+          item,
+          rounds[index + 1],
+          session?.summary ?? null,
+          PLAN_SESSION_EDIT_KEY
+        ),
         questions: item.questions as unknown as PlanQuestion[],
         answers: (item.answers as unknown as PlanAnswer[] | null) ?? null,
         readyForPlan: item.readyForPlan,
       })),
-      proposal:
-        plan?.status === 'PROPOSED'
-          ? (plan.proposal as unknown as PlanProposal | null)
-          : null,
+      proposal: proposed ? (session?.proposal as unknown as PlanProposal) : null,
       themes,
       instantDraft: draft ? this.instantView(draft, this.today(org)) : null,
       today: this.today(org),
     };
-  }
-
-  // The direction of a round as the owner left it: the edit the owner sent with the answers (kept in the next round's
-  // first turn), or for the latest round the plan's direction, which holds the owner's last edit.
-  private directionOf(
-    round: { direction: string },
-    next: { userTurn: string } | undefined,
-    plan: ContentPlan
-  ) {
-    if (!next) {
-      return plan.direction ?? round.direction;
-    }
-    try {
-      const edited = JSON.parse(next.userTurn)?.editedDirection;
-      return typeof edited === 'string' && edited ? edited : round.direction;
-    } catch {
-      return round.direction;
-    }
   }
 
   // What the first textarea starts with: the brand profile as plain lines (the name first), or empty when the profile
@@ -1731,60 +1395,7 @@ export class ContentPlanService {
     });
   }
 
-  // The refs of a proposal's clusters in rotation order.
-  private rotationOf(proposal: Pick<PlanProposal, 'themes' | 'clusters'>) {
-    return rotationOrder(
-      proposal.themes.map((theme, index) => ({ id: theme.ref, position: index })),
-      proposal.clusters.map((cluster, index) => ({
-        id: cluster.ref,
-        themeId: cluster.themeRef,
-        position: index,
-      }))
-    );
-  }
-
-  // The first day of the plan's first week: today, or the day after the week that is running now, so the weeks of a
-  // plan that is started over never overlap the one the phone still shows.
-  private async firstWeekStart(planId: string, today: string) {
-    const current = await this._contentPlanRepository.currentWrittenWeek(
-      planId,
-      today,
-      addDays(today, -6)
-    );
-    return current ? addDays(current.weekStart, 7) : today;
-  }
-
-  // The setup round written from the chat so far, saved with the exact texts of its turns (re-sent byte for byte next
-  // time).
-  private writeRound(
-    org: PlanBrand & { id: string },
-    planId: string,
-    index: number,
-    turns: ChatTurn[],
-    newUserTurn: string,
-    beforeSave?: () => Promise<void>
-  ) {
-    return this.writeChatRound(
-      org,
-      planId,
-      (input) => this._contentPlanGenerator.setupRound(input),
-      turns,
-      newUserTurn,
-      (round) =>
-        this._contentPlanRepository.saveRound({
-          planId,
-          index,
-          direction: round.direction,
-          questions: round.questions,
-          readyForPlan: round.readyForPlan,
-          userTurn: newUserTurn,
-          assistantTurn: round.assistantTurn,
-        }),
-      beforeSave
-    );
-  }
-
-  // One round of an interview chat, the part the setup and a session share: the AI call (`ask`) booked on the price-0
+  // One round of an interview chat, the part every session shares: the AI call (`ask`) booked on the price-0
   // action plan.setup_round, then `beforeSave` (a rewind that waits for the answer) and `save`, which stores the round
   // with the exact texts of its turns.
   async writeChatRound(

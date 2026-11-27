@@ -119,6 +119,8 @@ import { ContentPlanService } from '@gitroom/nestjs-libraries/database/prisma/co
 import { ContentPlanSessionRepository } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.repository';
 import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.service';
 import { PlanSessionKinds } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.kind';
+import { PlanSetupSessionKind } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.setup.kind';
+import { ContentPlanSetupService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.setup.service';
 import { VideoSetSessionKind } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.video.set.kind';
 import { ClefOmniClient } from '@gitroom/nestjs-libraries/ai-video-edit/clef.omni.client';
 import { EditAssetsService } from '@gitroom/nestjs-libraries/ai-video-edit/assets/edit.assets.service';
@@ -264,6 +266,8 @@ import { TrackerService } from '@gitroom/nestjs-libraries/database/prisma/activi
     ContentPlanSessionRepository,
     ContentPlanSessionService,
     PlanSessionKinds,
+    PlanSetupSessionKind,
+    ContentPlanSetupService,
     VideoSetSessionKind,
     ClefOmniClient,
     IconscoutClient,

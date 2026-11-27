@@ -1,4 +1,5 @@
-// Content plan: reads and writes a workspace's plan, the rounds of its setup, its themes and clusters and its weeks.
+// Content plan: reads and writes a workspace's plan, its themes and clusters and its weeks (the setup's rounds are
+// sessions of the planning engine).
 // Every query that takes an id of a row below the plan also filters by the plan, which belongs to one workspace.
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -6,34 +7,12 @@ import {
   PrismaRepository,
   PrismaTransaction,
 } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
-import { ChatTurn } from '@gitroom/nestjs-libraries/muse/muse.chat.service';
 import { addDays } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
 import {
-  PlanAnswer,
   PlanBeat,
   PlanCarryItem,
   PlanOutlineItem,
-  PlanProposal,
-  PlanQuestion,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
-
-// A round of the setup as `saveRound` stores it.
-export interface NewPlanRound {
-  planId: string;
-  index: number;
-  direction: string;
-  questions: PlanQuestion[];
-  readyForPlan: boolean;
-  userTurn: string;
-  assistantTurn: string;
-}
-
-// What the proposal job saves once the plan is written.
-export interface SavedProposal {
-  proposal: PlanProposal;
-  proposalVersion: number;
-  proposalTurns: ChatTurn[];
-}
 
 // What confirming a proposal writes: themes and clusters with the ids made by the caller, and the 12 weeks.
 export interface NewActivePlan {
@@ -56,6 +35,10 @@ export interface NewActivePlan {
     outline: PlanOutlineItem[] | null;
   }[];
   facts: Prisma.InputJsonValue;
+  // what the owner confirmed it from: the direction, the first text and the videos a week
+  direction: string;
+  sourceText: string | null;
+  videosPerWeek: number;
 }
 
 // One written video of a week: the day it is on, its angle and its script.
@@ -105,11 +88,10 @@ export interface NewPlanWeek {
 
 @Injectable()
 export class ContentPlanRepository {
-  // Receives the Prisma repositories for the plan, its rounds, themes, clusters, weeks, days and instant ideas, and the
+  // Receives the Prisma repositories for the plan, its themes, clusters, weeks, days and instant ideas, and the
   // transaction.
   constructor(
     private _plan: PrismaRepository<'contentPlan'>,
-    private _round: PrismaRepository<'contentPlanRound'>,
     private _theme: PrismaRepository<'planTheme'>,
     private _cluster: PrismaRepository<'planCluster'>,
     private _week: PrismaRepository<'planWeek'>,
@@ -168,87 +150,6 @@ export class ContentPlanRepository {
     return this.update(planId, { ...data, busy: null });
   }
 
-  // Back to a fresh setup: the rounds are deleted, the proposal and its chat cleared. The weeks stay.
-  resetSetup(planId: string, extra: Prisma.ContentPlanUncheckedUpdateInput = {}) {
-    return this._transaction.model.$transaction([
-      this._round.model.contentPlanRound.deleteMany({ where: { planId } }),
-      this._plan.model.contentPlan.update({
-        where: { id: planId },
-        data: {
-          ...extra,
-          status: 'SETUP',
-          proposal: Prisma.DbNull,
-          proposalTurns: Prisma.DbNull,
-          notice: null,
-        },
-      }),
-    ]);
-  }
-
-  // The rounds of the setup, first to last.
-  rounds(planId: string) {
-    return this._round.model.contentPlanRound.findMany({
-      where: { planId },
-      orderBy: { index: 'asc' },
-    });
-  }
-
-  // Takes the setup back to the round at `index`: the rounds after it are removed and a proposal written from them is
-  // dropped, so that round is the latest again.
-  rewindTo(planId: string, index: number) {
-    return this._transaction.model.$transaction([
-      this._round.model.contentPlanRound.deleteMany({
-        where: { planId, index: { gt: index } },
-      }),
-      this._plan.model.contentPlan.update({
-        where: { id: planId },
-        data: {
-          status: 'SETUP',
-          proposal: Prisma.DbNull,
-          proposalTurns: Prisma.DbNull,
-          notice: null,
-        },
-      }),
-    ]);
-  }
-
-  // The latest round of the setup, or null.
-  latestRound(planId: string) {
-    return this._round.model.contentPlanRound.findFirst({
-      where: { planId },
-      orderBy: { index: 'desc' },
-    });
-  }
-
-  // Saves a round and makes its direction the plan's, in one write.
-  saveRound(round: NewPlanRound) {
-    return this._transaction.model.$transaction([
-      this._round.model.contentPlanRound.create({
-        data: {
-          planId: round.planId,
-          index: round.index,
-          direction: round.direction,
-          questions: round.questions as unknown as Prisma.InputJsonValue,
-          readyForPlan: round.readyForPlan,
-          userTurn: round.userTurn,
-          assistantTurn: round.assistantTurn,
-        },
-      }),
-      this._plan.model.contentPlan.update({
-        where: { id: round.planId },
-        data: { direction: round.direction },
-      }),
-    ]);
-  }
-
-  // Stores the owner's answers on a round of the plan.
-  saveAnswers(planId: string, roundId: string, answers: PlanAnswer[]) {
-    return this._round.model.contentPlanRound.updateMany({
-      where: { id: roundId, planId },
-      data: { answers: answers as unknown as Prisma.InputJsonValue },
-    });
-  }
-
   // The themes of the plan that are not archived, in order.
   activeThemes(planId: string) {
     return this._theme.model.planTheme.findMany({
@@ -270,23 +171,6 @@ export class ContentPlanRepository {
       orderBy: { weekStart: 'desc' },
       select: { id: true, weekStart: true },
     });
-  }
-
-  // Saves the written proposal and moves the plan to PROPOSED, but only while the proposal job still holds the plan (a
-  // reset in the meantime clears it, and the late answer is dropped). Returns whether it was saved.
-  async saveProposal(planId: string, saved: SavedProposal) {
-    const { count } = await this._plan.model.contentPlan.updateMany({
-      where: { id: planId, busy: 'proposal' },
-      data: {
-        status: 'PROPOSED',
-        proposal: saved.proposal as unknown as Prisma.InputJsonValue,
-        proposalVersion: saved.proposalVersion,
-        proposalTurns: saved.proposalTurns as unknown as Prisma.InputJsonValue,
-        busy: null,
-        notice: null,
-      },
-    });
-    return count === 1;
   }
 
   // Makes the proposal the plan, in one transaction: the old themes and clusters are archived, the new ones and the
@@ -332,8 +216,9 @@ export class ContentPlanRepository {
         data: {
           status: 'ACTIVE',
           confirmedAt: new Date(),
-          proposal: Prisma.DbNull,
-          proposalTurns: Prisma.DbNull,
+          direction: data.direction,
+          sourceText: data.sourceText,
+          videosPerWeek: data.videosPerWeek,
           facts: data.facts,
           busy: null,
           notice: null,

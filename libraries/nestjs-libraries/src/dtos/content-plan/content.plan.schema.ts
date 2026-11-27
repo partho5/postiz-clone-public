@@ -229,6 +229,10 @@ export interface PlanView {
   today: string;
 }
 
+// The kind of session that is the plan's setup, and the key under which its answer turns carry the owner's edit of the
+// summary (the setup always called the summary its direction, and its stored chats say so).
+export const PLAN_SESSION_KIND = 'plan';
+export const PLAN_SESSION_EDIT_KEY = 'editedDirection';
 export type PlanSessionStatus = 'ASKING' | 'PROPOSING' | 'PROPOSED' | 'DONE' | 'DISCARDED';
 // One round of a session, as the setup's `PlanRoundView` but with the summary of what the AI understood.
 export interface PlanSessionRoundView {
@@ -255,6 +259,10 @@ export interface PlanSessionView {
   rounds: PlanSessionRoundView[];
   proposalVersion: number;
   proposal: unknown | null;
+}
+// The options of the plan's setup session as they are stored: how many videos a week the plan gets.
+export interface PlanSetupOptions {
+  videosPerWeek: number;
 }
 // The most videos one video-set session writes.
 export const MAX_VIDEO_SET = 7;
@@ -413,6 +421,10 @@ export const VideoSetEditsSchema = z
   })
   .strict();
 
+// The options of the plan's setup session: how many videos a week (the kind takes the plan's own number when it is left
+// out).
+export const PlanSetupOptionsSchema = z.object({ videosPerWeek: videosPerWeek.optional() }).strict();
+
 // The body of a session's start: the kind of work, the owner's first text and the kind's own options (the kind checks
 // them).
 export const StartSessionSchema = z
@@ -435,11 +447,13 @@ export const AnswerSessionSchema = z
   })
   .strict();
 
-// The body of a session's proposal: the summary as the owner left it and the answers of the last round.
+// The body of a session's proposal: the summary as the owner left it, the answers of the last round and the options the
+// kind takes with it (the kind checks them).
 export const ProposeSessionSchema = z
   .object({
     summary: text(LIMITS.direction),
     answers: z.array(PlanAnswerSchema).max(4).optional(),
+    options: z.record(z.unknown()).optional(),
   })
   .strict();
 

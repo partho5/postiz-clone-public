@@ -55,6 +55,26 @@ export const cleanSlideText = (text: string) => {
 // database row), so the same input always gives the same bytes and the prompt cache can match the prefix.
 export const stableJson = (value: unknown) => JSON.stringify(value);
 
+// The summary of a round of an interview as the owner left it: the edit the owner sent with the answers (kept under
+// `editedKey` in the next round's first turn), or for the latest round `latest`, which holds the owner's last edit, else
+// the summary the AI wrote.
+export const roundSummary = (
+  round: { summary: string },
+  next: { userTurn: string } | undefined,
+  latest: string | null,
+  editedKey: string
+) => {
+  if (!next) {
+    return latest ?? round.summary;
+  }
+  try {
+    const edited = JSON.parse(next.userTurn)?.[editedKey];
+    return typeof edited === 'string' && edited ? edited : round.summary;
+  } catch {
+    return round.summary;
+  }
+};
+
 // What the brand context message is written from.
 export interface BrandContext {
   name: string;

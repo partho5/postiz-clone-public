@@ -97,6 +97,15 @@ export class ContentPlanSessionRepository {
     return created;
   }
 
+  // Ends the open sessions of a kind in the workspace without using their proposals (the owner starts over); a job that is
+  // still writing one finds it discarded and drops its answer.
+  discardOpen(organizationId: string, kind: string) {
+    return this._session.model.planSession.updateMany({
+      where: { organizationId, kind, status: { in: OPEN_STATUSES } },
+      data: { status: 'DISCARDED', busy: null },
+    });
+  }
+
   // Writes the given fields of a session.
   update(id: string, data: Prisma.PlanSessionUncheckedUpdateInput) {
     return this._session.model.planSession.update({ where: { id }, data });

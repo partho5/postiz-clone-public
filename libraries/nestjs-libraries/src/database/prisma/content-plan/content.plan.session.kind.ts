@@ -35,8 +35,12 @@ export interface PlanSessionKind {
   roundFrame: PlannerPromptKey;
   // The field hints of the rounds' answer schema, when the kind words them itself; the setup's when it has none.
   roundHints?: RoundFieldHints;
-  // The action the proposal and the revise are charged on.
-  proposalAction: string;
+  // The key under which the first turn of a round after the owner's answers carries the owner's edit of the summary;
+  // 'editedSummary' when the kind has none of its own (the setup's stored chats call the summary its direction).
+  editedKey?: string;
+  // The action the proposal and the revise are charged on as one call; absent when the kind books each of its AI calls
+  // itself (the setup's proposal is several calls on several actions).
+  proposalAction?: string;
   // The plan the session belongs to: the one the setup makes, or the running plan a kind works inside (the kind refuses
   // when the workspace has none, so no plan row is made for it).
   planOf(org: PlanOrganization): Promise<ContentPlan>;
@@ -47,6 +51,12 @@ export interface PlanSessionKind {
     org: PlanOrganization,
     plan: ContentPlan
   ): Prisma.InputJsonObject | Promise<Prisma.InputJsonObject>;
+  // The options the owner sends with the proposal request, checked and merged over the stored ones; absent when the kind
+  // takes none there. Throws InvalidPlanException when they are not valid.
+  parseProposeOptions?(
+    options: unknown,
+    session: PlanSession
+  ): Prisma.InputJsonObject;
   // What the kind adds to the first turn of the rounds, next to the owner's first text, from the stored options.
   openingOf?(options: Prisma.InputJsonObject): Record<string, unknown>;
   // Writes the proposal from the session (its summary, options and answers). `turns` is the earlier proposal chat (empty

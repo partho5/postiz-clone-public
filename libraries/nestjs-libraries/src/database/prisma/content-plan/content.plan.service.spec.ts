@@ -1,4 +1,5 @@
-// Content plan service: the setup rounds, the proposal job and the confirmation. Needs no network, database or
+// Content plan service: the setup's own routes (start, answer, proposal, revise, confirm, reset), which run the plan's
+// session of the planning engine, the proposal job and the plan as the page draws it. Needs no network, database or
 // Temporal: the storage is an in-memory stand-in, and the generator, the credits and the workflow engine are stubs.
 // Covers stale rounds, the append-only chat of the rounds, the owner's direction saved before the next round, the
 // start of the proposal job, confirm (stale version, 12 weeks on the right clusters, the first week job), reset and
@@ -13,6 +14,10 @@ import {
   PlanAiFailed,
   PlanNotConfigured,
 } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.generator';
+import { ContentPlanSessionService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.service';
+import { PlanSessionKinds } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.kind';
+import { PlanSetupSessionKind } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.setup.kind';
+import { ContentPlanSetupService } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.setup.service';
 import { stableJson } from '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.rules';
 import {
   PlanFacts,
@@ -24,6 +29,10 @@ import { ContentPlanController } from '@gitroom/backend/api/routes/content.plan.
 jest.mock(
   '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.repository',
   () => ({ ContentPlanRepository: class {} })
+);
+jest.mock(
+  '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.repository',
+  () => ({ ContentPlanSessionRepository: class {} })
 );
 jest.mock(
   '@gitroom/nestjs-libraries/database/prisma/credits/credits.service',
@@ -65,7 +74,6 @@ const org = (role: Role = Role.ADMIN, extra = {}): PlanOrganization =>
 // The storage of the plan, in memory, with the behaviour the service relies on.
 class FakeRepository {
   plan: any = null;
-  roundRows: any[] = [];
   themes: any[] = [];
   clusters: any[] = [];
   weeks: any[] = [];
@@ -108,51 +116,9 @@ class FakeRepository {
   release = async (_id: string, data: any = {}) => {
     Object.assign(this.plan, data, { busy: null });
   };
-  rewindTo = async (_id: string, index: number) => {
-    this.calls.push('rewindTo');
-    this.roundRows = this.roundRows.filter((row) => row.index <= index);
-    Object.assign(this.plan, {
-      status: 'SETUP',
-      proposal: null,
-      proposalTurns: null,
-      notice: null,
-    });
-  };
-  resetSetup = async (_id: string, extra: any = {}) => {
-    this.calls.push('resetSetup');
-    this.roundRows = [];
-    Object.assign(this.plan, extra, {
-      status: 'SETUP',
-      proposal: null,
-      proposalTurns: null,
-      notice: null,
-    });
-  };
-  rounds = async () => [...this.roundRows].sort((a, b) => a.index - b.index);
-  latestRound = async () => (await this.rounds()).slice(-1)[0] ?? null;
-  saveRound = async (round: any) => {
-    this.roundRows.push({ ...round, id: `round-${round.index}`, answers: null });
-    this.plan.direction = round.direction;
-  };
-  saveAnswers = async (_planId: string, roundId: string, answers: any) => {
-    this.roundRows.find((row) => row.id === roundId).answers = answers;
-  };
   activeThemes = async () => this.themes.filter((theme) => !theme.archivedAt);
   openDraft = async () => null;
   currentWrittenWeek = async () => null;
-  saveProposal = async (_id: string, saved: any) => {
-    if (this.plan.busy !== 'proposal') {
-      return false;
-    }
-    Object.assign(this.plan, {
-      status: 'PROPOSED',
-      proposal: saved.proposal,
-      proposalVersion: saved.proposalVersion,
-      proposalTurns: saved.proposalTurns,
-      busy: null,
-    });
-    return true;
-  };
   activate = async (data: any) => {
     this.calls.push('activate');
     this.themes = data.themes;
@@ -160,11 +126,102 @@ class FakeRepository {
     this.weeks = data.weeks;
     Object.assign(this.plan, {
       status: 'ACTIVE',
-      proposal: null,
-      proposalTurns: null,
+      direction: data.direction,
+      sourceText: data.sourceText,
+      videosPerWeek: data.videosPerWeek,
       facts: data.facts,
       busy: null,
     });
+  };
+}
+
+// The storage of the sessions, in memory, with the behaviour the engine relies on.
+class FakeSessionRepository {
+  sessions: any[] = [];
+  roundRows: any[] = [];
+  calls: string[] = [];
+
+  private find = (id: string) => this.sessions.find((row) => row.id === id);
+  private isOpen = (row: any) => ['ASKING', 'PROPOSING', 'PROPOSED'].includes(row.status);
+
+  findByOrganization = async (organizationId: string, id: string) =>
+    this.sessions.find((row) => row.id === id && row.organizationId === organizationId) ?? null;
+  findOpen = async (organizationId: string, kind: string) =>
+    [...this.sessions]
+      .reverse()
+      .find((row) => row.organizationId === organizationId && row.kind === kind && this.isOpen(row)) ?? null;
+  findWithOrganization = async (id: string) => {
+    const row = this.find(id);
+    return (
+      row && {
+        ...row,
+        organization: { id: row.organizationId, name: 'Bakery', locale: 'en', timezone: 'UTC' },
+      }
+    );
+  };
+  create = async (session: any) => {
+    this.sessions
+      .filter((row) => row.organizationId === session.organizationId && row.kind === session.kind && this.isOpen(row))
+      .forEach((row) => Object.assign(row, { status: 'DISCARDED', busy: null }));
+    const row = {
+      ...session,
+      id: `session-${this.sessions.length + 1}`,
+      status: 'ASKING',
+      summary: null,
+      proposal: null,
+      proposalVersion: 0,
+      proposalTurns: null,
+      busy: 'round',
+      notice: null,
+      confirmedAt: null,
+    };
+    this.sessions.push(row);
+    return row;
+  };
+  discardOpen = async (organizationId: string, kind: string) => {
+    this.calls.push('discardOpen');
+    this.sessions
+      .filter((row) => row.organizationId === organizationId && row.kind === kind && this.isOpen(row))
+      .forEach((row) => Object.assign(row, { status: 'DISCARDED', busy: null }));
+  };
+  update = async (id: string, data: any) => Object.assign(this.find(id), data);
+  claimBusy = async (id: string, busy: string) => {
+    if (this.find(id).busy) {
+      return false;
+    }
+    this.find(id).busy = busy;
+    return true;
+  };
+  release = async (id: string, data: any = {}) => Object.assign(this.find(id), data, { busy: null });
+  rounds = async (sessionId: string) =>
+    this.roundRows.filter((row) => row.sessionId === sessionId).sort((a, b) => a.index - b.index);
+  latestRound = async (sessionId: string) => (await this.rounds(sessionId)).slice(-1)[0] ?? null;
+  rewindTo = async (sessionId: string, index: number) => {
+    this.calls.push('rewindTo');
+    this.roundRows = this.roundRows.filter((row) => row.sessionId !== sessionId || row.index <= index);
+    Object.assign(this.find(sessionId), { status: 'ASKING', proposal: null, proposalTurns: null, notice: null });
+  };
+  saveRound = async (round: any) => {
+    this.roundRows.push({ ...round, id: `round-${round.index}`, answers: null });
+    this.find(round.sessionId).summary = round.summary;
+  };
+  saveAnswers = async (sessionId: string, roundId: string, answers: any) => {
+    this.roundRows.find((row) => row.id === roundId && row.sessionId === sessionId).answers = answers;
+  };
+  saveProposal = async (id: string, saved: any) => {
+    const row = this.find(id);
+    if (row.busy !== 'proposal' || row.status !== 'PROPOSING') {
+      return false;
+    }
+    Object.assign(row, {
+      status: 'PROPOSED',
+      proposal: saved.proposal,
+      proposalVersion: saved.proposalVersion,
+      proposalTurns: saved.proposalTurns,
+      busy: null,
+      notice: null,
+    });
+    return true;
   };
 }
 
@@ -189,8 +246,9 @@ const roundAnswer = (extra = {}) => ({
 
 const build = (generatorOverrides: Record<string, any> = {}) => {
   const repository = new FakeRepository();
+  const sessions = new FakeSessionRepository();
   const generator: Record<string, jest.Mock> = {
-    setupRound: jest.fn().mockResolvedValue(roundAnswer()),
+    chatRound: jest.fn().mockResolvedValue(roundAnswer()),
     proposeStructure: jest.fn(),
     writeIdeas: jest.fn(),
     writeOutline: jest.fn(),
@@ -203,9 +261,14 @@ const build = (generatorOverrides: Record<string, any> = {}) => {
     repository as any,
     generator as any,
     { spend } as any,
-    temporal as any
+    temporal as any,
+    sessions as any
   );
-  return { service, repository, generator, spend, start };
+  const kinds = new PlanSessionKinds();
+  new PlanSetupSessionKind(kinds, service, repository as any, generator as any);
+  const sessionService = new ContentPlanSessionService(sessions as any, generator as any, service, kinds);
+  const setup = new ContentPlanSetupService(service, repository as any, sessions as any, sessionService);
+  return { service, setup, sessionService, repository, sessions, generator, spend, start };
 };
 
 // The code of an HttpException a call rejects with, or undefined when it resolves.
@@ -220,7 +283,7 @@ const codeOf = async (call: Promise<unknown>) => {
 
 // A plan with a setup of one round, ready to answer.
 const withRound = async (ctx: ReturnType<typeof build>) => {
-  await ctx.service.startSetup(org(), { sourceText: 'We bake bread' });
+  await ctx.setup.startSetup(org(), { sourceText: 'We bake bread' });
   return ctx;
 };
 
@@ -255,15 +318,18 @@ describe('ContentPlanService setup', () => {
     expect((await service.view(org(Role.SUPERADMIN))).canEdit).toBe(true);
   });
 
-  it('writes round 0 from the source text, spends on plan.setup_round and frees the plan', async () => {
-    const { service, generator, spend, repository } = build();
-    const view = await service.startSetup(org(), { sourceText: ' We bake bread ' });
-    expect(generator.setupRound).toHaveBeenCalledWith(
+  it('writes round 0 from the source text on the setup frame, spends on plan.setup_round and frees the session', async () => {
+    const { setup, generator, spend, sessions } = build();
+    const view = await setup.startSetup(org(), { sourceText: ' We bake bread ' });
+    // the setup frame and its own field hints (none given: the generator's default)
+    expect(generator.chatRound).toHaveBeenCalledWith(
+      'planner.frame.setup',
       expect.objectContaining({
         orgId: ORG,
         turns: [],
         newUserTurn: stableJson({ sourceText: 'We bake bread' }),
-      })
+      }),
+      undefined
     );
     expect(spend.mock.calls[0][0]).toEqual(
       expect.objectContaining({
@@ -281,51 +347,60 @@ describe('ContentPlanService setup', () => {
       readyForPlan: false,
     });
     expect(view.direction).toBe('We bake for locals');
+    expect(view.sourceText).toBe('We bake bread');
+    expect(view.videosPerWeek).toBe(3);
+    expect(view.status).toBe('SETUP');
     expect(view.busy).toBeNull();
-    expect(repository.roundRows[0].userTurn).toBe(
-      stableJson({ sourceText: 'We bake bread' })
-    );
+    expect(sessions.sessions[0]).toMatchObject({ kind: 'plan', status: 'ASKING', options: { videosPerWeek: 3 } });
+    expect(sessions.roundRows[0].userTurn).toBe(stableJson({ sourceText: 'We bake bread' }));
   });
 
   it('refuses to start a setup over an ACTIVE plan', async () => {
     const ctx = build();
     await ctx.repository.ensure();
     ctx.repository.plan.status = 'ACTIVE';
-    expect(await codeOf(ctx.service.startSetup(org(), { sourceText: 'x' }))).toBe(
-      'PLAN_EXISTS'
-    );
+    expect(await codeOf(ctx.setup.startSetup(org(), { sourceText: 'x' }))).toBe('PLAN_EXISTS');
+    expect(ctx.sessions.sessions).toHaveLength(0);
   });
 
-  it('refuses a second job while one holds the plan', async () => {
-    const ctx = build();
-    await ctx.repository.ensure();
-    ctx.repository.plan.busy = 'round';
-    expect(await codeOf(ctx.service.startSetup(org(), { sourceText: 'x' }))).toBe(
-      'PLAN_BUSY'
-    );
+  it('refuses a second job while one holds the session', async () => {
+    const ctx = await withRound(build());
+    ctx.sessions.sessions[0].busy = 'round';
+    expect(
+      await codeOf(
+        ctx.setup.answer(org(), {
+          roundId: 'round-0',
+          direction: 'd',
+          answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
+        })
+      )
+    ).toBe('PLAN_BUSY');
+  });
+
+  it('starting again ends the open setup and starts a new one', async () => {
+    const ctx = await withRound(build());
+    await ctx.setup.startSetup(org(), { sourceText: 'We sell shoes' });
+    expect(ctx.sessions.sessions.map((row) => row.status)).toEqual(['DISCARDED', 'ASKING']);
+    expect((await ctx.service.view(org())).sourceText).toBe('We sell shoes');
   });
 
   it('answers 400 INVALID_PLAN for a bad body', async () => {
-    const { service } = build();
-    expect(await codeOf(service.startSetup(org(), { sourceText: '' }))).toBe(
-      'INVALID_PLAN'
-    );
-    expect(await codeOf(service.startSetup(org(), { sourceText: 'x', extra: 1 }))).toBe(
-      'INVALID_PLAN'
-    );
+    const { setup } = build();
+    expect(await codeOf(setup.startSetup(org(), { sourceText: '' }))).toBe('INVALID_PLAN');
+    expect(await codeOf(setup.startSetup(org(), { sourceText: 'x', extra: 1 }))).toBe('INVALID_PLAN');
   });
 
-  it('turns a refused planner into 503 and a failed call into 502, and frees the plan', async () => {
-    const refused = build({ setupRound: jest.fn().mockRejectedValue(new PlanNotConfigured()) });
-    expect(await codeOf(refused.service.startSetup(org(), { sourceText: 'x' }))).toBe(
+  it('turns a refused planner into 503 and a failed call into 502, and frees the session', async () => {
+    const refused = build({ chatRound: jest.fn().mockRejectedValue(new PlanNotConfigured()) });
+    expect(await codeOf(refused.setup.startSetup(org(), { sourceText: 'x' }))).toBe(
       'PLAN_NOT_AVAILABLE'
     );
-    expect(refused.repository.plan.busy).toBeNull();
-    const failed = build({ setupRound: jest.fn().mockRejectedValue(new PlanAiFailed()) });
-    expect(await codeOf(failed.service.startSetup(org(), { sourceText: 'x' }))).toBe(
-      'PLAN_AI_FAILED'
-    );
-    expect(failed.repository.plan.busy).toBeNull();
+    expect(refused.sessions.sessions[0]).toMatchObject({ busy: null, status: 'DISCARDED' });
+    const failed = build({ chatRound: jest.fn().mockRejectedValue(new PlanAiFailed()) });
+    expect(await codeOf(failed.setup.startSetup(org(), { sourceText: 'x' }))).toBe('PLAN_AI_FAILED');
+    expect(failed.sessions.sessions[0]).toMatchObject({ busy: null, status: 'DISCARDED' });
+    // no setup is left to resume, so the page is back at the first step
+    expect((await failed.service.view(org())).round).toBeNull();
   });
 });
 
@@ -334,21 +409,21 @@ describe('ContentPlanService answer', () => {
     const ctx = await withRound(build());
     expect(
       await codeOf(
-        ctx.service.answer(org(), {
+        ctx.setup.answer(org(), {
           roundId: 'round-old',
           direction: 'd',
           answers: [],
         })
       )
     ).toBe('ROUND_STALE');
-    expect(ctx.generator.setupRound).toHaveBeenCalledTimes(1);
+    expect(ctx.generator.chatRound).toHaveBeenCalledTimes(1);
   });
 
   it('refuses an answer to a question or option that is not in the round', async () => {
     const ctx = await withRound(build());
     expect(
       await codeOf(
-        ctx.service.answer(org(), {
+        ctx.setup.answer(org(), {
           roundId: 'round-0',
           direction: 'd',
           answers: [{ questionId: 'q9', optionId: 'o1' }],
@@ -357,7 +432,7 @@ describe('ContentPlanService answer', () => {
     ).toBe('INVALID_PLAN');
     expect(
       await codeOf(
-        ctx.service.answer(org(), {
+        ctx.setup.answer(org(), {
           roundId: 'round-0',
           direction: 'd',
           answers: [{ questionId: 'q1', optionId: 'o9' }],
@@ -369,21 +444,22 @@ describe('ContentPlanService answer', () => {
   it('saves the owner direction before the next round and sends the chat append-only without ids', async () => {
     const ctx = await withRound(build());
     let directionWhenAsked: string | null = null;
-    ctx.generator.setupRound.mockImplementationOnce(async () => {
-      directionWhenAsked = ctx.repository.plan.direction;
+    ctx.generator.chatRound.mockImplementationOnce(async () => {
+      directionWhenAsked = ctx.sessions.sessions[0].summary;
       return roundAnswer({ direction: 'Next direction', assistantTurn: '{"raw":"second"}' });
     });
-    const view = await ctx.service.answer(org(), {
+    const view = await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake sourdough for locals',
       answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
     });
     expect(directionWhenAsked).toBe('We bake sourdough for locals');
-    const call = ctx.generator.setupRound.mock.calls[1][0];
+    const call = ctx.generator.chatRound.mock.calls[1][1];
     expect(call.turns).toEqual([
       { role: 'user', content: stableJson({ sourceText: 'We bake bread' }) },
       { role: 'assistant', content: '{"raw":"assistant text"}' },
     ]);
+    // the setup keeps its own key for the owner's edit, so its prompts are the bytes they always were
     expect(call.newUserTurn).toBe(
       stableJson({
         answers: [{ question: 'Who buys?', answer: 'Tourists' }],
@@ -393,21 +469,21 @@ describe('ContentPlanService answer', () => {
     expect(call.newUserTurn).not.toContain('o2');
     expect(view.round?.index).toBe(1);
     expect(view.direction).toBe('Next direction');
-    expect(ctx.repository.roundRows[0].answers).toEqual([
+    expect(ctx.sessions.roundRows[0].answers).toEqual([
       { questionId: 'q1', optionId: 'o2', optionIds: [], other: null },
     ]);
-    expect(ctx.repository.roundRows[1].userTurn).toBe(call.newUserTurn);
-    expect(ctx.repository.roundRows[1].assistantTurn).toBe('{"raw":"second"}');
+    expect(ctx.sessions.roundRows[1].userTurn).toBe(call.newUserTurn);
+    expect(ctx.sessions.roundRows[1].assistantTurn).toBe('{"raw":"second"}');
   });
 
   it('sends every ticked option of a question that takes several, then the owner own words', async () => {
     const ctx = await withRound(build());
-    await ctx.service.answer(org(), {
+    await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake for locals',
       answers: [{ questionId: 'q1', optionId: null, optionIds: ['o1', 'o2'], other: 'Hotels' }],
     });
-    expect(ctx.generator.setupRound.mock.calls[1][0].newUserTurn).toBe(
+    expect(ctx.generator.chatRound.mock.calls[1][1].newUserTurn).toBe(
       stableJson({
         answers: [{ question: 'Who buys?', answer: 'Locals, Tourists, Hotels' }],
         editedDirection: null,
@@ -416,7 +492,7 @@ describe('ContentPlanService answer', () => {
     const fresh = await withRound(build());
     expect(
       await codeOf(
-        fresh.service.answer(org(), {
+        fresh.setup.answer(org(), {
           roundId: 'round-0',
           direction: 'd',
           answers: [{ questionId: 'q1', optionId: null, optionIds: ['o1', 'o9'], other: null }],
@@ -427,7 +503,7 @@ describe('ContentPlanService answer', () => {
 
   it('shows every round with its answers and the direction as the owner left it', async () => {
     const ctx = await withRound(build());
-    await ctx.service.answer(org(), {
+    await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake sourdough for locals',
       answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
@@ -445,50 +521,50 @@ describe('ContentPlanService answer', () => {
 
   it('answering an earlier round drops the rounds after it and writes the next one from the changed answers', async () => {
     const ctx = await withRound(build());
-    await ctx.service.answer(org(), {
+    await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake bread',
       answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
     });
-    ctx.repository.calls.length = 0;
-    const view = await ctx.service.answer(org(), {
+    ctx.sessions.calls.length = 0;
+    const view = await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake bread',
       answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
     });
-    expect(ctx.repository.calls).toContain('rewindTo');
+    expect(ctx.sessions.calls).toContain('rewindTo');
     expect(view.rounds.map((round) => round.index)).toEqual([0, 1]);
-    const call = ctx.generator.setupRound.mock.calls[2][0];
+    const call = ctx.generator.chatRound.mock.calls[2][1];
     expect(call.turns).toHaveLength(2);
     expect(call.newUserTurn).toContain('Tourists');
-    expect(ctx.repository.roundRows[0].answers[0].optionId).toBe('o2');
+    expect(ctx.sessions.roundRows[0].answers[0].optionId).toBe('o2');
   });
 
   it('keeps the later rounds and the old answers when the AI fails while going back to an earlier round', async () => {
     const ctx = await withRound(build());
-    await ctx.service.answer(org(), {
+    await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake bread',
       answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
     });
-    ctx.generator.setupRound.mockRejectedValueOnce(new Error('model down'));
+    ctx.generator.chatRound.mockRejectedValueOnce(new Error('model down'));
     await expect(
-      ctx.service.answer(org(), {
+      ctx.setup.answer(org(), {
         roundId: 'round-0',
         direction: 'We bake bread',
         answers: [{ questionId: 'q1', optionId: 'o2', other: null }],
       })
     ).rejects.toBeDefined();
-    expect(ctx.repository.calls).not.toContain('rewindTo');
-    expect(ctx.repository.roundRows).toHaveLength(2);
-    expect(ctx.repository.roundRows[0].answers[0].optionId).toBe('o1');
+    expect(ctx.sessions.calls).not.toContain('rewindTo');
+    expect(ctx.sessions.roundRows).toHaveLength(2);
+    expect(ctx.sessions.roundRows[0].answers[0].optionId).toBe('o1');
   });
 
   it('refuses a round that is not in the plan', async () => {
     const ctx = await withRound(build());
     expect(
       await codeOf(
-        ctx.service.answer(org(), {
+        ctx.setup.answer(org(), {
           roundId: 'nope',
           direction: 'd',
           answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
@@ -497,14 +573,22 @@ describe('ContentPlanService answer', () => {
     ).toBe('ROUND_STALE');
   });
 
+  it('refuses an answer when the workspace has no setup: 404 without a plan, 409 with one', async () => {
+    const ctx = build();
+    const body = { roundId: 'round-0', direction: 'd', answers: [] };
+    expect(await codeOf(ctx.setup.answer(org(), body))).toBe('PLAN_NOT_FOUND');
+    await ctx.repository.ensure();
+    expect(await codeOf(ctx.setup.answer(org(), body))).toBe('ROUND_STALE');
+  });
+
   it('sends the owner own words when given, and null when the direction was not edited', async () => {
     const ctx = await withRound(build());
-    await ctx.service.answer(org(), {
+    await ctx.setup.answer(org(), {
       roundId: 'round-0',
       direction: 'We bake for locals',
       answers: [{ questionId: 'q1', optionId: 'o1', other: 'Mostly cafes' }],
     });
-    expect(ctx.generator.setupRound.mock.calls[1][0].newUserTurn).toBe(
+    expect(ctx.generator.chatRound.mock.calls[1][1].newUserTurn).toBe(
       stableJson({
         answers: [{ question: 'Who buys?', answer: 'Mostly cafes' }],
         editedDirection: null,
@@ -534,14 +618,16 @@ const proposal = (version = 1): PlanProposal => ({
   })),
 });
 
+// A setup whose proposal has been written (version `version`), the owner at the preview.
 const proposed = async (ctx: ReturnType<typeof build>, version = 1) => {
-  await ctx.repository.ensure();
-  Object.assign(ctx.repository.plan, {
+  await withRound(ctx);
+  Object.assign(ctx.sessions.sessions[0], {
     status: 'PROPOSED',
-    direction: 'We bake for locals',
+    summary: 'We bake for locals',
     proposal: proposal(version),
     proposalVersion: version,
-    videosPerWeek: 1,
+    options: { videosPerWeek: 1 },
+    busy: null,
   });
   return ctx;
 };
@@ -549,60 +635,69 @@ const proposed = async (ctx: ReturnType<typeof build>, version = 1) => {
 describe('ContentPlanService propose and revise', () => {
   it('stores the direction and videos per week and starts the proposal job', async () => {
     const ctx = await withRound(build());
-    const view = await ctx.service.propose(org(), {
+    const view = await ctx.setup.propose(org(), {
       direction: 'We bake for locals',
       videosPerWeek: 5,
       answers: [{ questionId: 'q1', optionId: 'o1', other: null }],
     });
-    expect(ctx.repository.plan.videosPerWeek).toBe(5);
-    expect(ctx.repository.plan.direction).toBe('We bake for locals');
-    expect(ctx.repository.roundRows[0].answers).toHaveLength(1);
+    expect(ctx.sessions.sessions[0].options).toEqual({ videosPerWeek: 5 });
+    expect(ctx.sessions.sessions[0].summary).toBe('We bake for locals');
+    expect(ctx.sessions.roundRows[0].answers).toHaveLength(1);
     expect(ctx.start).toHaveBeenCalledWith(
       'contentPlanJobWorkflow',
       expect.objectContaining({
-        workflowId: 'content_plan_proposal_plan-1',
+        workflowId: 'content_plan_session_proposal_session-1',
         taskQueue: 'main',
-        args: [{ kind: 'proposal', id: 'plan-1' }],
+        args: [{ kind: 'session_proposal', id: 'session-1' }],
       })
     );
     expect(view.busy).toBe('proposal');
+    expect(view.videosPerWeek).toBe(5);
   });
 
-  it('answers 409 PLAN_BUSY when the job is already running and keeps the plan held', async () => {
+  it('answers 409 PLAN_BUSY when the job is already running and keeps the session held', async () => {
     const ctx = await withRound(build());
     ctx.start.mockRejectedValueOnce(
-      new WorkflowExecutionAlreadyStartedError('started', 'content_plan_proposal_plan-1', 'contentPlanJobWorkflow')
+      new WorkflowExecutionAlreadyStartedError(
+        'started',
+        'content_plan_session_proposal_session-1',
+        'contentPlanJobWorkflow'
+      )
     );
     expect(
-      await codeOf(ctx.service.propose(org(), { direction: 'd', videosPerWeek: 3 }))
+      await codeOf(ctx.setup.propose(org(), { direction: 'd', videosPerWeek: 3 }))
     ).toBe('PLAN_BUSY');
-    expect(ctx.repository.plan.busy).toBe('proposal');
+    expect(ctx.sessions.sessions[0].busy).toBe('proposal');
   });
 
-  it('answers 503 and frees the plan when the job cannot be started', async () => {
+  it('answers 503 and frees the session when the job cannot be started', async () => {
     const ctx = await withRound(build());
     ctx.start.mockRejectedValueOnce(new Error('down'));
     expect(
-      await codeOf(ctx.service.propose(org(), { direction: 'd', videosPerWeek: 3 }))
+      await codeOf(ctx.setup.propose(org(), { direction: 'd', videosPerWeek: 3 }))
     ).toBe('PLAN_NOT_AVAILABLE');
-    expect(ctx.repository.plan.busy).toBeNull();
+    expect(ctx.sessions.sessions[0]).toMatchObject({ busy: null, status: 'ASKING' });
   });
 
   it('refuses a revise of a stale proposal and starts the revise job otherwise', async () => {
     const ctx = await proposed(build(), 2);
+    ctx.start.mockClear();
     expect(
-      await codeOf(ctx.service.revise(org(), { proposalVersion: 1, feedback: 'More' }))
+      await codeOf(ctx.setup.revise(org(), { proposalVersion: 1, feedback: 'More' }))
     ).toBe('PROPOSAL_STALE');
     expect(ctx.start).not.toHaveBeenCalled();
-    const view = await ctx.service.revise(org(), { proposalVersion: 2, feedback: 'More' });
+    const view = await ctx.setup.revise(org(), { proposalVersion: 2, feedback: 'More' });
     expect(ctx.start).toHaveBeenCalledWith(
       'contentPlanJobWorkflow',
       expect.objectContaining({
-        workflowId: 'content_plan_revise_plan-1',
-        args: [{ kind: 'revise', id: 'plan-1', feedback: 'More' }],
+        workflowId: 'content_plan_session_revise_session-1',
+        args: [{ kind: 'session_revise', id: 'session-1', feedback: 'More' }],
       })
     );
     expect(view.busy).toBe('proposal');
+    // the plan page keeps showing the proposal that is being written again
+    expect(view.status).toBe('PROPOSED');
+    expect(view.proposal?.version).toBe(2);
   });
 });
 
@@ -626,20 +721,23 @@ describe('ContentPlanService buildProposal', () => {
     }));
   };
 
+  // A setup whose proposal job is running (the session is held by it).
   const startPlan = async (ctx: ReturnType<typeof build>) => {
-    await ctx.repository.ensure();
-    Object.assign(ctx.repository.plan, {
-      direction: 'We bake for locals',
-      videosPerWeek: 3,
+    await withRound(ctx);
+    Object.assign(ctx.sessions.sessions[0], {
+      summary: 'We bake for locals',
+      options: { videosPerWeek: 3 },
+      status: 'PROPOSING',
       busy: 'proposal',
     });
+    ctx.spend.mockClear();
   };
 
-  it('writes the structure, 12 ideas and 4 outlines, and saves a PROPOSED plan', async () => {
+  it('writes the structure, 12 ideas and 4 outlines, and saves a PROPOSED session', async () => {
     const ctx = build();
     wire(ctx);
     await startPlan(ctx);
-    await ctx.service.buildProposal('plan-1', null);
+    await ctx.sessionService.buildProposal('session-1', null);
     expect(ctx.generator.proposeStructure).toHaveBeenCalledWith(
       expect.objectContaining({
         turns: [],
@@ -648,10 +746,11 @@ describe('ContentPlanService buildProposal', () => {
     );
     expect(ctx.generator.writeIdeas.mock.calls[0][0].weeks).toHaveLength(ROADMAP_WEEKS);
     expect(ctx.generator.writeOutline).toHaveBeenCalledTimes(4);
-    const saved = ctx.repository.plan;
+    const saved = ctx.sessions.sessions[0];
     expect(saved.status).toBe('PROPOSED');
     expect(saved.busy).toBeNull();
     expect(saved.proposalVersion).toBe(1);
+    expect(saved.proposal.version).toBe(1);
     expect(saved.proposal.weeks).toHaveLength(ROADMAP_WEEKS);
     expect(saved.proposal.weeks.filter((week: any) => week.outline).length).toBe(4);
     expect(saved.proposal.weeks[0].outline).toHaveLength(3);
@@ -666,6 +765,7 @@ describe('ContentPlanService buildProposal', () => {
       { role: 'user', content: stableJson({ direction: 'We bake for locals' }) },
       { role: 'assistant', content: '{"raw":"structure"}' },
     ]);
+    // each AI call is booked on its own action, as before the setup moved onto sessions
     expect(ctx.spend.mock.calls.map((call) => call[0].actionKey)).toEqual([
       'plan.proposal',
       'plan.roadmap',
@@ -676,6 +776,16 @@ describe('ContentPlanService buildProposal', () => {
     ]);
   });
 
+  it('writes the outlines for the videos per week the owner chose', async () => {
+    const ctx = build();
+    wire(ctx);
+    await startPlan(ctx);
+    ctx.sessions.sessions[0].options = { videosPerWeek: 5 };
+    await ctx.sessionService.buildProposal('session-1', null);
+    expect(ctx.generator.writeOutline.mock.calls[0][0].videosPerWeek).toBe(5);
+    expect(ctx.generator.writeOutline.mock.calls[0][0].angles).toHaveLength(5);
+  });
+
   it('appends the feedback to the stored chat on a revise', async () => {
     const ctx = build();
     wire(ctx);
@@ -684,71 +794,83 @@ describe('ContentPlanService buildProposal', () => {
       { role: 'user', content: 'first' },
       { role: 'assistant', content: 'answer' },
     ];
-    Object.assign(ctx.repository.plan, { proposalTurns: earlier, proposalVersion: 1 });
-    await ctx.service.buildProposal('plan-1', 'Fewer themes');
+    Object.assign(ctx.sessions.sessions[0], { proposalTurns: earlier, proposalVersion: 1 });
+    await ctx.sessionService.buildProposal('session-1', 'Fewer themes');
     expect(ctx.generator.proposeStructure.mock.calls[0][0].turns).toEqual(earlier);
     expect(ctx.generator.proposeStructure.mock.calls[0][0].newUserTurn).toBe(
       stableJson({ feedback: 'Fewer themes' })
     );
-    expect(ctx.repository.plan.proposalVersion).toBe(2);
-    expect(ctx.repository.plan.proposalTurns).toEqual([
+    expect(ctx.sessions.sessions[0].proposalVersion).toBe(2);
+    expect(ctx.sessions.sessions[0].proposal.version).toBe(2);
+    expect(ctx.sessions.sessions[0].proposalTurns).toEqual([
       ...earlier,
       { role: 'user', content: stableJson({ feedback: 'Fewer themes' }) },
       { role: 'assistant', content: '{"raw":"structure"}' },
     ]);
   });
 
-  it('drops the answer when the plan was reset while it was written', async () => {
+  it('drops the answer when the setup was reset while it was written', async () => {
     const ctx = build();
     wire(ctx);
     await startPlan(ctx);
     ctx.generator.writeIdeas.mockImplementationOnce(async (input: any) => {
-      ctx.repository.plan.busy = null;
+      await ctx.setup.reset(org());
       return { ideas: input.weeks.map(() => 'i'), usage: structure.usage };
     });
-    await ctx.service.buildProposal('plan-1', null);
+    await ctx.sessionService.buildProposal('session-1', null);
+    expect(ctx.sessions.sessions[0].status).toBe('DISCARDED');
+    expect(ctx.sessions.sessions[0].proposal).toBeNull();
     expect(ctx.repository.plan.status).toBe('SETUP');
-    expect(ctx.repository.plan.proposal).toBeNull();
   });
 
   it('throws the generator failure and the failure path sets the notice', async () => {
     const ctx = build();
     ctx.generator.proposeStructure.mockRejectedValue(new PlanAiFailed());
     await startPlan(ctx);
-    await expect(ctx.service.buildProposal('plan-1', null)).rejects.toBeInstanceOf(
+    await expect(ctx.sessionService.buildProposal('session-1', null)).rejects.toBeInstanceOf(
       PlanAiFailed
     );
-    await ctx.service.proposalFailed('plan-1');
-    expect(ctx.repository.plan.busy).toBeNull();
-    expect(ctx.repository.plan.notice).toBe('proposal_failed');
+    await ctx.sessionService.sessionFailed('session-1');
+    expect(ctx.sessions.sessions[0]).toMatchObject({
+      busy: null,
+      notice: 'proposal_failed',
+      status: 'ASKING',
+    });
   });
 });
 
 describe('ContentPlanService confirm', () => {
   it('refuses a stale proposal version', async () => {
     const ctx = await proposed(build(), 2);
-    expect(await codeOf(ctx.service.confirm(org(), { proposalVersion: 1 }))).toBe(
-      'PROPOSAL_STALE'
-    );
+    expect(await codeOf(ctx.setup.confirm(org(), { proposalVersion: 1 }))).toBe('PROPOSAL_STALE');
     expect(ctx.repository.calls).not.toContain('activate');
   });
 
-  it('refuses when the plan is not PROPOSED', async () => {
+  it('refuses when the setup is not PROPOSED', async () => {
     const ctx = build();
     await ctx.repository.ensure();
-    expect(await codeOf(ctx.service.confirm(org(), { proposalVersion: 0 }))).toBe(
-      'PROPOSAL_STALE'
-    );
+    expect(await codeOf(ctx.setup.confirm(org(), { proposalVersion: 0 }))).toBe('PROPOSAL_STALE');
+    const asking = await withRound(build());
+    expect(await codeOf(asking.setup.confirm(org(), { proposalVersion: 0 }))).toBe('PROPOSAL_STALE');
   });
 
   it('creates 12 weeks on the right clusters from today and starts the first week job', async () => {
     const ctx = await proposed(build());
     const today = new Date().toISOString().slice(0, 10);
-    const view = await ctx.service.confirm(org(), { proposalVersion: 1 });
+    const view = await ctx.setup.confirm(org(), { proposalVersion: 1 });
     const { themes, clusters, weeks } = ctx.repository;
     expect(view.status).toBe('ACTIVE');
     expect(view.facts).toEqual(facts);
     expect(view.proposal).toBeNull();
+    // the session summary is the plan's direction, with the videos a week and the first text
+    expect(view.direction).toBe('We bake for locals');
+    expect(view.videosPerWeek).toBe(1);
+    expect(ctx.repository.plan).toMatchObject({
+      direction: 'We bake for locals',
+      videosPerWeek: 1,
+      sourceText: 'We bake bread',
+    });
+    expect(ctx.sessions.sessions[0].status).toBe('DONE');
     expect(themes.map((theme: any) => theme.position)).toEqual([0, 1]);
     // interleaved rotation: c1 (t1), c3 (t2), c2 (t1)
     const byTitle = (title: string) => clusters.find((c: any) => c.title === title);
@@ -780,7 +902,7 @@ describe('ContentPlanService confirm', () => {
   it('is still confirmed when the first week job cannot be started', async () => {
     const ctx = await proposed(build());
     ctx.start.mockRejectedValueOnce(new Error('down'));
-    const view = await ctx.service.confirm(org(), { proposalVersion: 1 });
+    const view = await ctx.setup.confirm(org(), { proposalVersion: 1 });
     expect(view.status).toBe('ACTIVE');
   });
 });
@@ -788,19 +910,28 @@ describe('ContentPlanService confirm', () => {
 describe('ContentPlanService reset and facts', () => {
   it('goes back to SETUP, clears the rounds and the proposal, and touches no week', async () => {
     const ctx = await proposed(build());
-    await ctx.service.confirm(org(), { proposalVersion: 1 });
+    await ctx.setup.confirm(org(), { proposalVersion: 1 });
     const weeks = [...ctx.repository.weeks];
-    const view = await ctx.service.reset(org());
+    const view = await ctx.setup.reset(org());
     expect(view.status).toBe('SETUP');
     expect(view.round).toBeNull();
     expect(view.proposal).toBeNull();
     expect(ctx.repository.weeks).toEqual(weeks);
   });
 
+  it('ends the open setup, and a new setup starts after it', async () => {
+    const ctx = await proposed(build());
+    const view = await ctx.setup.reset(org());
+    expect(ctx.sessions.sessions[0].status).toBe('DISCARDED');
+    expect(view).toMatchObject({ status: 'SETUP', round: null, proposal: null, busy: null });
+    await ctx.setup.startSetup(org(), { sourceText: 'We sell shoes' });
+    expect(ctx.sessions.sessions[1]).toMatchObject({ kind: 'plan', status: 'ASKING' });
+  });
+
   it('saves the facts into an ACTIVE plan and into a PROPOSED proposal', async () => {
     const edited = { ...facts, tone: 'Playful' };
     const active = await proposed(build());
-    await active.service.confirm(org(), { proposalVersion: 1 });
+    await active.setup.confirm(org(), { proposalVersion: 1 });
     expect((await active.service.saveFacts(org(), { facts: edited })).facts?.tone).toBe(
       'Playful'
     );
@@ -808,23 +939,32 @@ describe('ContentPlanService reset and facts', () => {
     const view = await preview.service.saveFacts(org(), { facts: edited });
     expect(view.proposal?.facts.tone).toBe('Playful');
     expect(view.proposal?.version).toBe(1);
+    expect(preview.sessions.sessions[0].proposal.facts.tone).toBe('Playful');
   });
 
   it('refuses facts before there is a proposal', async () => {
     const ctx = build();
     await ctx.repository.ensure();
     expect(await codeOf(ctx.service.saveFacts(org(), { facts }))).toBe('PLAN_NOT_ACTIVE');
+    const asking = await withRound(build());
+    expect(await codeOf(asking.service.saveFacts(org(), { facts }))).toBe('PLAN_NOT_ACTIVE');
+  });
+
+  it('refuses facts while the proposal is being written again', async () => {
+    const ctx = await proposed(build());
+    ctx.sessions.sessions[0].busy = 'proposal';
+    expect(await codeOf(ctx.service.saveFacts(org(), { facts }))).toBe('PLAN_BUSY');
   });
 });
 
 describe('ContentPlanController', () => {
   it('refuses a USER member on every mutation and lets the read through', async () => {
-    const { service } = build();
+    const { service, setup } = build();
     const sessions = {
       view: jest.fn(async () => ({ id: 'session-1' })),
       open: jest.fn(async () => null),
     };
-    const controller = new ContentPlanController(service, sessions as any);
+    const controller = new ContentPlanController(service, sessions as any, setup);
     const user = org(Role.USER);
     const calls = [
       () => controller.startSetup(user, {}),

@@ -25,7 +25,7 @@ import {
   PlanQuestion,
 } from '@gitroom/nestjs-libraries/dtos/content-plan/content.plan.schema';
 
-// What the form needs of a round; the setup's `PlanRoundView` and a session's `PlanSessionRoundView` both fit (the text
+// What the form needs of a round; a session's `PlanSessionRoundView` fits (and the plan page's `PlanRoundView`; the text
 // of what the AI understood is passed as `summary`, because the two name it differently).
 export interface PlanQuestionRound {
   id: string;

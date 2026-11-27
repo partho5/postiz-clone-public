@@ -18,6 +18,10 @@ jest.mock(
   () => ({ ContentPlanRepository: class {} })
 );
 jest.mock(
+  '@gitroom/nestjs-libraries/database/prisma/content-plan/content.plan.session.repository',
+  () => ({ ContentPlanSessionRepository: class {} })
+);
+jest.mock(
   '@gitroom/nestjs-libraries/database/prisma/credits/credits.service',
   () => ({ CreditsService: class {} })
 );
@@ -310,7 +314,8 @@ const build = (videosPerWeek = 3) => {
     repository as any,
     generator as any,
     { spend } as any,
-    {} as any
+    {} as any,
+    { findOpen: async () => null, rounds: async () => [] } as any
   );
   return { service, repository, generator, spend };
 };
