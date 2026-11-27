@@ -129,16 +129,16 @@ its days, instant ideas in it, recorded marks, or today's date for the brand. Wi
 answers 200 with a stable stamp.
 
 ## Progress (runner)
-Branches: web `feat/instant-video-plan`; FaceCam `feat/instant-video-plan`. Coders and verifiers: Sonnet sub agents,
-high effort.
+Branches: web `feat/instant-video-plan`; FaceCam `feat/instant-video-plan`. Coders: Sonnet sub agents, high effort.
+Verification is deferred by the owner (2026-11-27): coders only for now, and every card is verified in one pass later.
 
 | Card | Status | Commit | Verified |
 |---|---|---|---|
 | IV1 | done, awaiting verify | web b446a175 | |
-| IV2 | todo | | |
+| IV2 | in progress | | |
 | IV3 | todo | | |
 | IV4 | todo | | |
 | IV5 | todo | | |
-| IV6 | in progress | | |
-| IV7 | todo | | |
+| IV6 | done, awaiting verify | FaceCam b85b2fe | |
+| IV7 | done, awaiting verify | FaceCam eb8563f | |
 | IV8 | todo | | |
