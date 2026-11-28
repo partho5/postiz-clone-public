@@ -108,6 +108,17 @@ const deliveredSummary = (delivered: unknown) => {
   };
 };
 
+// The request as a trace or log may hold it: `chapters` (slide titles and speaker notes, the user's own words) is replaced by
+// `{ count, with_title, with_note }`; every other field is kept as it is. A request without `chapters` is returned as it is.
+export const requestForTrace = <T>(request: T): T => {
+  const chapters = (request as { chapters?: unknown } | null | undefined)?.chapters;
+  if (!Array.isArray(chapters)) {
+    return request;
+  }
+  const filled = (key: string) => chapters.filter((c) => typeof c?.[key] === 'string' && c[key] !== '').length;
+  return { ...(request as object), chapters: { count: chapters.length, with_title: filled('title'), with_note: filled('note') } } as T;
+};
+
 // The bundle of an edit from its row and its trace rows (any order; the steps come out by `seq`), narrowed by step and kind.
 export const bundleOf = (edit: BundleEditInput, rows: BundleRowInput[], options: BundleOptions): TraceBundle => {
   const ordered = [...rows].sort((a, b) => a.seq - b.seq);
@@ -123,7 +134,7 @@ export const bundleOf = (edit: BundleEditInput, rows: BundleRowInput[], options:
       error: edit.error ?? null,
       createdAt: iso(edit.createdAt),
     },
-    request: edit.request ?? null,
+    request: requestForTrace(edit.request) ?? null,
     steps: ordered
       .filter((r) => (!options.step || r.step === options.step) && (!options.kind || r.kind === options.kind))
       .map(stepOf),

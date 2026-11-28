@@ -2,8 +2,11 @@
 // about one proxy piece, and the reading of its answers into the planner's SlotScores. Clef-omni is a decision
 // model: it only picks among options given here, it never writes text. Pure functions, no Nest or network import;
 // the call itself is `clef.omni.client.ts`.
+import { EditLevel, EditStyle, MomentLabel, RegistryEntry } from '../contract/edit.contract';
 import { phraseById, phrasesForMood } from '../contract/edit.phrases';
+import { effectsForLevel } from '../contract/edit.registry';
 import { FamilyChoice, SlotScores } from './edit.assembler';
+import { Direction } from './edit.moments';
 import { HOOK_SLOT_ID, Slot } from './edit.slots';
 
 // What one call takes at most (Clef-omni's limit).
@@ -56,8 +59,19 @@ export const FAMILIES: Record<string, string> = {
   text: 'A short text pops up on screen',
   camera: 'The camera punches in or the view changes',
   look: 'The picture flashes or glitches for a beat',
-  icon: 'A small animated icon appears',
+  icon: 'A small animated picture of the thing, action or feeling being talked about appears beside the speaker',
   none: 'Nothing, leave this moment plain',
+};
+
+// The pick questions (the director's moments, spec TS5): the question text, the `none` option and, per kind of moment,
+// where in the clip it happens. Times are seconds in the piece with a tenth. No transcript word ever goes in here.
+export const PICK_QUESTION = 'Which edit suits this moment best?';
+export const PICK_NONE = 'Leave it plain';
+export const PICK_WHERE = {
+  sentence: (from: string, to: string) => `From ${from} to ${to} the speaker says one sentence.`,
+  drawing: (from: string, to: string) => `From ${from} to ${to} something is drawn on the screen.`,
+  chapter: (from: string) => `At ${from} the screen changes to a new topic.`,
+  cut: () => 'Where the video cuts from one part to the next, across the whole clip.',
 };
 
 // One slot to ask about: where it is in its piece and the word spoken there.
@@ -158,6 +172,143 @@ export const pieceQuestions = (targets: PieceTarget[]): ClefQuestion[] => [
   ),
 ];
 
+// ---- Picks: the effect Clef-omni chooses for each labelled moment, among the registry ids the phone declared ----
+
+// The most effects offered for one moment (registry order), besides `none`.
+export const MAX_PICK_CANDIDATES = 12;
+
+// The moments that get a pick question, by label; the others (hook, reason, example, plain) are planned as before.
+export const PICK_LABELS: MomentLabel[] = ['claim', 'recap', 'cta', 'drawing', 'chapter'];
+
+// What decides which effects may be offered.
+export interface PickContext {
+  level: EditLevel;
+  style: EditStyle;
+  // the effect ids the phone declared (`request.capabilities`); absent = no filter
+  capabilities?: { effects: string[] };
+  // whether the recording has a facecam track (`request.facecam_track` is not empty)
+  facecam: boolean;
+}
+
+// The role of a pick: a drawing has a facecam role and a screen role; every other label has one (`main`).
+export type PickRole = 'main' | 'face' | 'screen';
+
+// The registry entries that may serve a moment of this label in this role: the ones whose `moments` include the
+// label, at the level, declared by the phone, fitting the style and, for the facecam layer, with a facecam track.
+// Registry order, at most MAX_PICK_CANDIDATES.
+export const candidatesFor = (
+  label: MomentLabel,
+  role: PickRole,
+  ctx: PickContext
+): RegistryEntry[] =>
+  effectsForLevel(ctx.level, ctx.capabilities)
+    .filter(
+      (e) =>
+        !!e.moments?.includes(label) &&
+        (!e.styles || e.styles.includes(ctx.style)) &&
+        (ctx.facecam || e.layer !== 'facecam') &&
+        (role === 'main' || (role === 'face') === (e.layer === 'facecam'))
+    )
+    .slice(0, MAX_PICK_CANDIDATES);
+
+// One pick question, with what reading its answer needs.
+export interface PickAsk {
+  // the key in `SlotScores.picks`: `<momentId>`, `<momentId>:face`, `<momentId>:screen` or `cut`
+  key: string;
+  question: ClefQuestion;
+  // the registry ids the answer may be (besides `none`)
+  candidates: string[];
+  // the id used when Clef-omni gives no valid answer: the candidate at (the moment's ordinal) % candidates
+  fallback: string;
+}
+
+// The pick questions of every piece (`pieceCount` pieces of the video; the moments' times are source times, as the
+// pieces are cut). A moment goes to the piece holding its start; `pick_cut` goes to the first piece. Nothing is asked
+// without a director's direction. The ordinal of a moment is its place among the moments of the same label and role,
+// so each kind rotates through its own candidates.
+export const pickQuestions = (
+  direction: Direction | undefined,
+  context: Omit<PickContext, 'style'>,
+  durationMs: number,
+  pieceCount: number
+): PickAsk[][] => {
+  const pieces: PickAsk[][] = Array.from({ length: Math.max(1, pieceCount) }, () => []);
+  if (!direction || direction.source !== 'director') return pieces;
+  const ctx: PickContext = { ...context, style: direction.style };
+  const length = pieceLength(durationMs, pieces.length);
+  const ordinals: Record<string, number> = {};
+  const moments = [...direction.moments]
+    .filter((m) => PICK_LABELS.includes(m.label))
+    .sort((a, b) => a.start_ms - b.start_ms);
+  const ask = (
+    index: number,
+    key: string,
+    id: string,
+    where: string,
+    candidates: RegistryEntry[],
+    ordinal: number
+  ) => {
+    pieces[index].push({
+      key,
+      question: {
+        id,
+        type: 'choice',
+        instruction: `${where} ${PICK_QUESTION}`,
+        criteria: {
+          ...Object.fromEntries(candidates.map((e) => [e.id, e.describe ?? e.id])),
+          none: PICK_NONE,
+        },
+      },
+      candidates: candidates.map((e) => e.id),
+      fallback: candidates[ordinal % candidates.length].id,
+    });
+  };
+  for (const moment of moments) {
+    const index = Math.min(pieces.length - 1, Math.floor(moment.start_ms / length));
+    const from = at(Math.max(0, moment.start_ms - index * length));
+    const to = at(Math.max(0, moment.end_ms - index * length));
+    const roles: PickRole[] = moment.label === 'drawing' ? ['face', 'screen'] : ['main'];
+    for (const role of roles) {
+      const candidates = candidatesFor(moment.label, role, ctx);
+      if (!candidates.length) continue;
+      const group = `${moment.label}:${role}`;
+      const ordinal = ordinals[group] ?? 0;
+      ordinals[group] = ordinal + 1;
+      const suffix = role === 'main' ? '' : `_${role}`;
+      const where =
+        moment.kind === 'chapter'
+          ? PICK_WHERE.chapter(from)
+          : moment.kind === 'drawing'
+            ? PICK_WHERE.drawing(from, to)
+            : PICK_WHERE.sentence(from, to);
+      ask(index, role === 'main' ? moment.id : `${moment.id}:${role}`, `pick_${moment.id}${suffix}`, where, candidates, ordinal);
+    }
+  }
+  // the transitions of the cut points, one pick for the video, only in a lively style
+  if (direction.style === 'lively') {
+    const candidates = candidatesFor('cut', 'main', ctx);
+    if (candidates.length) ask(0, 'cut', 'pick_cut', PICK_WHERE.cut(), candidates, 0);
+  }
+  return pieces;
+};
+
+// The picks of the questions that got no valid answer (a call failed, a piece was dropped, Clef-omni is not
+// configured, the answer was not a candidate or `none`) filled with each question's fallback id. `filled` is what was
+// added, by key (ids only); the scores are returned as they are when nothing was added, else with the filled keys in
+// `fallback_picks` (the moment decision says `fallback` from it).
+export const withFallbackPicks = (
+  scores: SlotScores | undefined,
+  asks: PickAsk[]
+): { scores: SlotScores | undefined; filled: Record<string, string> } => {
+  const filled: Record<string, string> = {};
+  for (const a of asks) {
+    if (scores?.picks?.[a.key] === undefined) filled[a.key] = a.fallback;
+  }
+  if (!Object.keys(filled).length) return { scores, filled };
+  const fallbackPicks = Array.from(new Set([...(scores?.fallback_picks || []), ...Object.keys(filled)]));
+  return { scores: { ...scores, picks: { ...scores?.picks, ...filled }, fallback_picks: fallbackPicks }, filled };
+};
+
 // The commentary questions: for each slot, which phrase of the closed library (those of the piece's mood) fits, or
 // none. Empty when the mood is unknown or has no phrase. The hook slot has its own text and is not asked.
 export const commentaryQuestions = (
@@ -201,8 +352,9 @@ const probability = (answer: ClefAnswer | undefined) =>
 const energyOf = (answer: ClefAnswer | undefined) =>
   typeof answer === 'string' ? ENERGY_LEVELS[answer] : probability(answer);
 
-// What one piece's answers say, in the planner's terms. Answers that are not a valid option are ignored.
-export const readPiece = (answers: ClefAnswers): SlotScores => {
+// What one piece's answers say, in the planner's terms. Answers that are not a valid option are ignored. `picks` are the
+// pick questions asked in the piece: an answer counts only when it is one of the question's candidates or `none`.
+export const readPiece = (answers: ClefAnswers, picks: PickAsk[] = []): SlotScores => {
   const out: SlotScores = {};
   const mood = answers.mood;
   if (typeof mood === 'string' && mood in MOODS) out.mood = mood;
@@ -227,6 +379,12 @@ export const readPiece = (answers: ClefAnswers): SlotScores => {
       }
     }
   }
+  for (const a of picks) {
+    const answer = answers[a.question.id];
+    if (typeof answer === 'string' && (answer === 'none' || a.candidates.includes(answer))) {
+      (out.picks ||= {})[a.key] = answer;
+    }
+  }
   return out;
 };
 
@@ -247,6 +405,7 @@ export const mergePieces = (
     if (piece.emphasis) out.emphasis = { ...out.emphasis, ...piece.emphasis };
     if (piece.commentary) out.commentary = { ...out.commentary, ...piece.commentary };
     if (piece.family) out.family = { ...out.family, ...piece.family };
+    if (piece.picks) out.picks = { ...out.picks, ...piece.picks };
   }
   let best = 0;
   for (const [mood, count] of moods) {

@@ -12,11 +12,13 @@ import {
 export type TraceStep =
   | 'create'
   | 'transcribe'
+  | 'direct'
   | 'structure'
   | 'perceive'
   | 'write'
   | 'assets'
   | 'assemble'
+  | 'plan'
   | 'validate'
   | 'client_check'
   | 'deliver'

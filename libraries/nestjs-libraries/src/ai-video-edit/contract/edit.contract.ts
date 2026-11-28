@@ -36,6 +36,14 @@ export type ComponentType =
   | 'icon_image'
   | 'captions';
 
+// What a moment of the video is: the director labels sentences, rules label the events (drawing, chapter, cut).
+export type MomentLabel =
+  | 'hook' | 'claim' | 'reason' | 'example' | 'recap' | 'cta' | 'plain' // sentences (director)
+  | 'drawing' | 'chapter' | 'cut'; // events (rules)
+
+// The overall feel of an edit, picked by the director: `calm` keeps to quiet effects, `lively` allows the loud ones.
+export type EditStyle = 'calm' | 'lively';
+
 // The five named positions of an overlay, resolved by the renderer per output ratio.
 export type ZoneId =
   | 'upper_left'
@@ -62,15 +70,22 @@ export interface SafeRect {
   y1: number;
 }
 
-// What one level may use (spec section 6). `max_feature_effects` leaves out captions and transitions.
+// What one level may use (spec section 6). The feature effects leave out captions and transitions. The budget is per
+// minute of video (`budgetFor`): `max_feature_effects` and `max_icons` are the least a video gets (a video of up to one
+// minute), `feature_effects_per_minute` and `icons_per_minute` the rate a longer video gets. `calm_icons_per_minute` is
+// the icon rate of a calm video (never below that many, never above the level's own icon budget).
 export interface LevelRule {
   max_feature_effects: number;
   max_icons: number;
+  feature_effects_per_minute: number;
+  icons_per_minute: number;
+  calm_icons_per_minute: number;
   text_kinds: TextKind[];
   transitions: boolean;
   sounds: boolean;
   perception: boolean;
   writer: boolean;
+  director: boolean;
 }
 
 // The speed limits every effect obeys (spec section 12), in milliseconds unless a name says otherwise.
@@ -131,10 +146,11 @@ export interface ActivityEntry {
 }
 
 // One output the user enabled: its top-anchored crop of the master and the caption band of the user's subtitle style.
+// No caption band means the output shows no captions (the planner then may echo a keyword as a text).
 export interface EditRequestOutput {
   ratio: OutputRatio;
   crop: { x: number; y: number; w: number; h: number };
-  caption_band: { y0: number; y1: number };
+  caption_band?: { y0: number; y1: number };
 }
 
 // The body's `request` object of `POST /public/v1/ai-edits`.
@@ -155,6 +171,15 @@ export interface EditRequest {
   // `text_motions` and `text_features` are optional: absent means the legacy motions and looks needing no feature only
   capabilities: { effects: string[]; text_styles: string[]; text_motions?: string[]; text_features?: string[] };
   options: { sound_effects: boolean };
+  // The slides of the recording (a new slide, a topic change): absent on older phones. `region` is the slide's content
+  // box, in master fractions.
+  chapters?: {
+    start_ms: number;
+    kind: 'text' | 'image' | 'other';
+    title?: string;
+    note?: string;
+    region?: { x: number; y: number; w: number; h: number };
+  }[];
 }
 
 // One spoken word of the transcript, `i` counted from 0 over words only.
@@ -289,10 +314,22 @@ export interface RegistryEntry {
   default_params: Record<string, ParamValue>;
   param_limits: Record<string, [number, number]>;
   cooldown_ms: number;
+  // The count of one effect per minute of video (`capFor`), never below this value; the name is the contract's.
   max_per_video: number;
   sound: SoundId[];
   brand_colorable: boolean;
   requires: string[];
+  // Additive, all optional (absent = the old behaviour): what the director's picker sees and where an effect may serve.
+  // Plain English, shown to the model as the option text.
+  describe?: string;
+  // The moments this effect may serve; absent = the slot path only.
+  moments?: MomentLabel[];
+  // The styles this effect fits; absent = both.
+  styles?: EditStyle[];
+  // May sit inside a protected (drawing) span.
+  in_drawing?: boolean;
+  // Allowed string values per param; the first value is the default.
+  param_enums?: Record<string, string[]>;
 }
 
 // ---- Text looks (spec section 13): colour roles, never fixed colours; sizes are fractions of the text size `s` ----
@@ -431,29 +468,41 @@ export const LEVEL_RULES: Record<EditLevel, LevelRule> = {
   basic: {
     max_feature_effects: 3,
     max_icons: 0,
+    feature_effects_per_minute: 3,
+    icons_per_minute: 0,
+    calm_icons_per_minute: 0,
     text_kinds: ['keyword_echo', 'hook'],
     transitions: false,
     sounds: false,
     perception: false,
     writer: false,
+    director: false,
   },
   standard: {
     max_feature_effects: 6,
     max_icons: 2,
+    feature_effects_per_minute: 6,
+    icons_per_minute: 2,
+    calm_icons_per_minute: 1,
     text_kinds: ['keyword_echo', 'hook', 'commentary'],
     transitions: true,
     sounds: true,
     perception: true,
     writer: false,
+    director: true,
   },
   heavy: {
     max_feature_effects: 10,
     max_icons: 4,
+    feature_effects_per_minute: 10,
+    icons_per_minute: 4,
+    calm_icons_per_minute: 2,
     text_kinds: ['keyword_echo', 'hook', 'commentary', 'complementary'],
     transitions: true,
     sounds: true,
     perception: true,
     writer: true,
+    director: true,
   },
 };
 
@@ -466,7 +515,7 @@ export const SPEED_RULES: SpeedRules = {
   push_in_max_ms: 800,
   slow_motion_max_ms: 500,
   text_hold: { base_ms: 500, per_word_ms: 150, max_ms: 2500 },
-  icon_hold_ms: [500, 1500],
+  icon_hold_ms: [500, 2500],
   clip_max_factor: 3.0,
 };
 

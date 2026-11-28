@@ -68,11 +68,12 @@ const text = (id: string, spec: Partial<EntrySpec>) =>
     ...spec,
   });
 
-// An mp4 clip or icon overlay: held 500 to 1500 ms, Standard and Heavy only.
+// An mp4 clip or icon overlay: held 500 to 2500 ms (an IconScout clip is 2 to 5 s, so it plays at a speed the eye
+// follows), Standard and Heavy only.
 const icon = (id: string, spec: Partial<EntrySpec>) =>
   entry(id, 'icon', 'overlay', {
     min_duration_ms: 500,
-    max_duration_ms: 1500,
+    max_duration_ms: 2500,
     cooldown_ms: 5000,
     max_per_video: 4,
     sound: ['pop_2', 'ding'],
@@ -125,6 +126,9 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 6000,
     max_per_video: 3,
     sound: ['whoosh_short', 'pop_1'],
+    moments: ['claim'],
+    styles: ['lively'],
+    describe: 'A quick zoom in on the frame to hit a key claim',
   }),
   video('v_push_in', 'full_frame', {
     min_duration_ms: 400,
@@ -134,6 +138,8 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 8000,
     max_per_video: 3,
     sound: ['swoosh'],
+    moments: ['claim'],
+    describe: 'A slow, gentle push in on the frame while a key claim is spoken',
   }),
   video('v_pull_out', 'full_frame', {
     min_duration_ms: 150,
@@ -186,6 +192,19 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 10000,
     max_per_video: 2,
     sound: ['impact_soft'],
+    styles: ['lively'],
+  }),
+  video('v_spotlight', 'full_frame', {
+    content_safe: true,
+    min_duration_ms: 800,
+    max_duration_ms: 12000,
+    default_params: { x: 0, y: 0, w: 1, h: 1, scale_to: 1.1, dim: 0.55, in_ms: 250, out_ms: 250 },
+    param_limits: { x: [0, 1], y: [0, 1], w: [0, 1], h: [0, 1], scale_to: [1, 1.25], dim: [0.3, 0.7] },
+    cooldown_ms: 3000,
+    max_per_video: 6,
+    moments: ['drawing'],
+    in_drawing: true,
+    describe: 'The picture dims and zooms a little so the viewer looks at the area being drawn',
   }),
 
   // Video: time
@@ -199,6 +218,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 10000,
     max_per_video: 2,
     sound: ['whoosh_short'],
+    styles: ['lively'],
   }),
   video('t_slow_beat', 'full_frame', {
     min_level: 'heavy',
@@ -210,6 +230,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 15000,
     max_per_video: 1,
     sound: ['impact_soft'],
+    styles: ['lively'],
   }),
   video('t_freeze_outline', 'full_frame', {
     min_level: 'heavy',
@@ -221,6 +242,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 15000,
     max_per_video: 1,
     sound: ['impact_soft'],
+    styles: ['lively'],
   }),
   video('t_rewind_short', 'full_frame', {
     min_level: 'heavy',
@@ -232,6 +254,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 15000,
     max_per_video: 1,
     sound: ['swoosh'],
+    styles: ['lively'],
   }),
   video('t_stutter', 'full_frame', {
     min_level: 'heavy',
@@ -243,6 +266,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 15000,
     max_per_video: 1,
     sound: ['click'],
+    styles: ['lively'],
   }),
   video('t_jump_cut', 'full_frame', {
     min_level: 'basic',
@@ -252,6 +276,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { keep_ms: [60, 250] },
     cooldown_ms: 0,
     max_per_video: 1000,
+    styles: ['lively'],
   }),
   video('t_echo_word', 'full_frame', {
     min_level: 'heavy',
@@ -262,6 +287,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { echo_delay_ms: [80, 250], echo_gain: [0.2, 0.6] },
     cooldown_ms: 15000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
 
   // Video: look and color
@@ -274,6 +300,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 4000,
     max_per_video: 4,
     sound: ['impact_soft', 'whoosh_short'],
+    styles: ['lively'],
   }),
   video('l_color_pop', 'full_frame', {
     content_safe: true,
@@ -283,6 +310,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { saturation_to: [1.2, 2.0] },
     cooldown_ms: 8000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
   video('l_bw_to_color', 'full_frame', {
     min_level: 'heavy',
@@ -292,6 +320,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { from_saturation: [0, 0.3] },
     cooldown_ms: 20000,
     max_per_video: 1,
+    styles: ['lively'],
   }),
   video('l_rgb_glitch', 'full_frame', {
     cost: 'M',
@@ -302,6 +331,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 8000,
     max_per_video: 2,
     sound: ['click', 'impact_soft'],
+    styles: ['lively'],
   }),
   video('l_vhs', 'full_frame', {
     min_level: 'heavy',
@@ -312,6 +342,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { noise: [0.1, 0.5], offset: [0.004, 0.015] },
     cooldown_ms: 12000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
   video('l_film_grain', 'full_frame', {
     min_level: 'heavy',
@@ -322,6 +353,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { intensity: [0.05, 0.25] },
     cooldown_ms: 10000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
   video('l_vignette_pulse', 'full_frame', {
     content_safe: true,
@@ -331,6 +363,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { strength_to: [0.3, 0.7] },
     cooldown_ms: 8000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
   video('l_light_leak', 'full_frame', {
     min_level: 'heavy',
@@ -343,6 +376,7 @@ export const EFFECTS: RegistryEntry[] = [
     cooldown_ms: 12000,
     max_per_video: 2,
     sound: ['swoosh'],
+    styles: ['lively'],
   }),
   video('l_bloom', 'full_frame', {
     min_level: 'heavy',
@@ -354,6 +388,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { intensity: [0.3, 0.8] },
     cooldown_ms: 12000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
   video('l_duotone', 'full_frame', {
     min_level: 'heavy',
@@ -362,6 +397,7 @@ export const EFFECTS: RegistryEntry[] = [
     default_params: { dark: '#1A1A40', light: '#FFD60A' },
     cooldown_ms: 12000,
     max_per_video: 2,
+    styles: ['lively'],
   }),
 
   // Video: layout
@@ -535,6 +571,53 @@ export const EFFECTS: RegistryEntry[] = [
     max_per_video: 3,
   }),
 
+  // Facecam: moves the director picks for a moment (the face steps aside for a drawing, grows for a claim)
+  facecam('f_step_aside', {
+    min_duration_ms: 1000,
+    max_duration_ms: 12000,
+    default_params: { direction: 'down', motion: 'slide', in_ms: 350, out_ms: 350, fill_color: '#000000' },
+    param_limits: { in_ms: [200, 600], out_ms: [200, 600] },
+    param_enums: { direction: ['down', 'left', 'right'], motion: ['slide', 'roll'] },
+    cooldown_ms: 4000,
+    max_per_video: 6,
+    moments: ['drawing'],
+    in_drawing: true,
+    describe: "The speaker's face slides out of view so the drawing is fully visible, then comes back",
+  }),
+  facecam('f_dodge', {
+    min_duration_ms: 1000,
+    max_duration_ms: 12000,
+    default_params: { to: 'left', distance: 0.3, motion: 'slide', in_ms: 350, out_ms: 350, fill_color: '#000000' },
+    param_limits: { distance: [0.15, 0.45], in_ms: [200, 600], out_ms: [200, 600] },
+    param_enums: { to: ['left', 'right', 'up', 'down'], motion: ['slide', 'roll'] },
+    cooldown_ms: 4000,
+    max_per_video: 6,
+    moments: ['drawing'],
+    in_drawing: true,
+    describe: "The speaker's face moves a little to the side to make room for the drawing, then returns",
+  }),
+  facecam('f_hero', {
+    content_safe: false,
+    min_duration_ms: 1200,
+    max_duration_ms: 4000,
+    default_params: { scale_to: 1.4, center_y: 0.45, dim: 0.3, in_ms: 300, out_ms: 300, fill_color: '#000000' },
+    param_limits: { scale_to: [1.2, 1.6], dim: [0, 0.5], center_y: [0.3, 0.6] },
+    cooldown_ms: 15000,
+    max_per_video: 2,
+    moments: ['claim', 'recap', 'cta'],
+    describe: "The speaker's face grows big near the centre for a personal, eye-to-eye moment",
+  }),
+  facecam('f_roll', {
+    min_duration_ms: 700,
+    max_duration_ms: 1400,
+    default_params: { direction: 'right', fill_color: '#000000' },
+    param_enums: { direction: ['right', 'left'] },
+    cooldown_ms: 8000,
+    max_per_video: 3,
+    moments: ['chapter'],
+    describe: "The speaker's face rolls across the screen to mark a new topic",
+  }),
+
   // Styled text (overlay): the text look comes from the plan's `style_preset`, the entry from `params.entry`
   text('x_marker_sweep', {
     min_level: 'basic',
@@ -567,22 +650,22 @@ export const EFFECTS: RegistryEntry[] = [
   }),
   text('x_sticker', {
     min_level: 'basic',
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'sticker' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'tilt_sticker' },
     param_limits: { entry_ms: [120, 300] },
     max_per_video: 6,
   }),
   text('x_3d', {
     min_level: 'basic',
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: '3d' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'gradient_block' },
     param_limits: { entry_ms: [120, 300] },
   }),
   text('x_glow', {
     min_level: 'basic',
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'glow' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'neon_box' },
     param_limits: { entry_ms: [120, 300] },
   }),
   text('x_gradient', {
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'gradient' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'gradient_block' },
     param_limits: { entry_ms: [120, 300] },
   }),
   text('x_label_tag', {
@@ -591,7 +674,7 @@ export const EFFECTS: RegistryEntry[] = [
     param_limits: { entry_ms: [120, 300] },
   }),
   text('x_tilt_sticker', {
-    default_params: { entry: 'pop', entry_ms: 220, exit_ms: 150, style_preset: 'sticker', tilt_deg: 6 },
+    default_params: { entry: 'pop', entry_ms: 220, exit_ms: 150, style_preset: 'tilt_sticker', tilt_deg: 6 },
     param_limits: { entry_ms: [120, 300], tilt_deg: [3, 6] },
   }),
   text('x_underline_draw', {
@@ -666,12 +749,16 @@ export const EFFECTS: RegistryEntry[] = [
   transition('tr_whip', {
     default_params: { direction: 'left', ease: 'out_cubic', blur: 0.02 },
     param_limits: { blur: [0.01, 0.04] },
+    moments: ['chapter', 'cut'],
+    styles: ['lively'],
+    describe: 'A fast whip across the cut into the next part',
   }),
   transition('tr_zoom_blur', {
     min_level: 'heavy',
     cost: 'M',
     default_params: { scale_to: 1.15, blur: 0.03 },
     param_limits: { scale_to: [1.08, 1.25] },
+    styles: ['lively'],
   }),
   transition('tr_glitch_cut', {
     min_level: 'heavy',
@@ -679,17 +766,22 @@ export const EFFECTS: RegistryEntry[] = [
     default_params: { offset: 0.012 },
     param_limits: { offset: [0.006, 0.02] },
     sound: ['click', 'impact_soft'],
+    styles: ['lively'],
   }),
   transition('tr_flash_cut', {
     default_params: { peak_alpha: 0.85 },
     param_limits: { peak_alpha: [0.5, 1.0] },
     sound: ['impact_soft'],
+    moments: ['chapter', 'cut'],
+    styles: ['lively'],
+    describe: 'A quick white flash on the cut into the next part',
   }),
   transition('tr_spin', {
     min_level: 'heavy',
     cost: 'M',
     default_params: { angle_deg: 15 },
     param_limits: { angle_deg: [8, 30] },
+    styles: ['lively'],
   }),
   transition('tr_shape_wipe', {
     min_level: 'heavy',
@@ -697,12 +789,21 @@ export const EFFECTS: RegistryEntry[] = [
     default_params: { shape: 'circle' },
   }),
   transition('tr_push', {
-    min_level: 'heavy',
-    default_params: { direction: 'left', ease: 'out_cubic' },
+    min_level: 'standard',
+    min_duration_ms: 250,
+    max_duration_ms: 400,
+    default_params: { direction: 'left', ease: 'out_cubic', fill_color: '#000000' },
+    param_enums: { direction: ['left', 'right'] },
+    moments: ['chapter'],
+    describe: 'The next part pushes the old one off the screen, a clear change of topic',
   }),
   transition('tr_dip_color', {
-    min_level: 'heavy',
+    min_level: 'standard',
+    min_duration_ms: 300,
+    max_duration_ms: 600,
     default_params: { color: '#111111' },
+    moments: ['chapter'],
+    describe: 'A short fade through black into the new topic',
   }),
 
   // Captions: the user's subtitle template (spec section 14, Captions), the engine adds the emphasis

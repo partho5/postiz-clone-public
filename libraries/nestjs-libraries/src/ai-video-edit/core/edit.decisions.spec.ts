@@ -25,6 +25,7 @@ const DROP_CODES: SlotDropCode[] = [
   'no_zone',
   'facecam_collision',
   'text_too_long',
+  'content_collision',
   'no_asset',
 ];
 
@@ -146,7 +147,8 @@ describe('ai.video-editing: planner decisions, assembler reason codes', () => {
     words: WORDS,
     windows: [{ start_ms: 0, end_ms: 20000 }],
     slots: SLOTS,
-    outputs: [ALL_OUTPUTS[0]],
+    // no caption band: no captions, so keyword echoes are allowed (TS9c)
+    outputs: [{ ratio: ALL_OUTPUTS[0].ratio, crop: ALL_OUTPUTS[0].crop }],
     facecam: [],
     durationMs: 20000,
     ...extra,
@@ -160,7 +162,7 @@ describe('ai.video-editing: planner decisions, assembler reason codes', () => {
 
   it('keeps the hook and two slots of Basic and drops the fourth for the level limit', () => {
     const { decisions, items } = byId('basic');
-    expect(decisions.h1).toMatchObject({ decision: 'kept', reason_code: 'hook', inputs: { item_id: 'e1', effect_id: 'x_sticker' } });
+    expect(decisions.h1).toMatchObject({ decision: 'kept', reason_code: 'hook', inputs: { item_id: 'e1', effect_id: 'x_label_tag' } });
     expect(decisions.s1).toMatchObject({ decision: 'kept', reason_code: 'placed', inputs: { item_id: 'e2', effect_id: 'x_label_tag', family: 'text' } });
     expect(decisions.s2).toMatchObject({ decision: 'kept', reason_code: 'placed', inputs: { item_id: 'e3', effect_id: 'v_punch_in', family: 'camera' } });
     expect(decisions.s3).toMatchObject({
@@ -188,7 +190,13 @@ describe('ai.video-editing: planner decisions, assembler reason codes', () => {
 
   it('says no_asset when the icon a slot asked for was not resolved and nothing else could take the slot', () => {
     const covered = { ...ALL_OUTPUTS[0], caption_band: { y0: 0, y1: 1 } };
-    const { decisions } = byId('heavy', { outputs: [covered], capabilities: TEXT_ONLY, scores: { family: { s1: 'icon' } } });
+    // captions are on (the band), so the text it tries is a commentary phrase, not a keyword echo
+    const { decisions } = byId('heavy', {
+      outputs: [covered],
+      capabilities: TEXT_ONLY,
+      language: 'eng',
+      scores: { family: { s1: 'icon' }, commentary: { s1: 'did_you_know' } },
+    });
     expect(decisions.s1).toMatchObject({ decision: 'dropped', reason_code: 'no_asset', inputs: { preferred: 'icon' } });
     const attempts = decisions.s1.inputs.attempts as { family: string; code: string }[];
     expect(attempts.map((a) => a.family)).toEqual(['icon', 'text', 'camera', 'look']);
@@ -197,7 +205,12 @@ describe('ai.video-editing: planner decisions, assembler reason codes', () => {
 
   it('says no_zone when no zone of any output takes the text and no other effect is allowed', () => {
     const covered = { ...ALL_OUTPUTS[0], caption_band: { y0: 0, y1: 1 } };
-    const { decisions, items } = byId('basic', { outputs: [covered], capabilities: TEXT_ONLY });
+    const { decisions, items } = byId('standard', {
+      outputs: [covered],
+      capabilities: TEXT_ONLY,
+      language: 'eng',
+      scores: { commentary: { s1: 'did_you_know' } },
+    });
     expect(items.filter(isFeature)).toEqual([]);
     expect(decisions.s1).toMatchObject({ decision: 'dropped', reason_code: 'no_zone' });
     const attempts = decisions.s1.inputs.attempts as { family: string; code: string }[];
@@ -209,6 +222,13 @@ describe('ai.video-editing: planner decisions, assembler reason codes', () => {
     const { decisions, items } = byId('basic', { facecam, capabilities: TEXT_ONLY });
     expect(items.filter(isFeature)).toEqual([]);
     expect(decisions.s1).toMatchObject({ decision: 'dropped', reason_code: 'facecam_collision' });
+  });
+
+  it('says content_collision when a zone would fit but for the ink or the slide title it would cover (TS9d)', () => {
+    const keepouts = [{ start_ms: 0, end_ms: 20000, region: { x: 0, y: 0, w: 1, h: 1 } }];
+    const { decisions, items } = byId('basic', { keepouts, capabilities: TEXT_ONLY });
+    expect(items.filter(isFeature)).toEqual([]);
+    expect(decisions.s1).toMatchObject({ decision: 'dropped', reason_code: 'content_collision' });
   });
 
   it('answers a decision for every slot even when nothing at all can be planned', () => {

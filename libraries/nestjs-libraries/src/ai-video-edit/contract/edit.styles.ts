@@ -446,6 +446,26 @@ export const TEXT_LOOKS: TextLook[] = [
 export const textLookById = (id: string, looks: TextLook[] = TEXT_LOOKS) =>
   looks.find((entry) => entry.id === id);
 
+// Whether a look draws a background behind its words: a `box` (card S8 looks) or a `bar` (the highlighter's marker).
+export const hasBackground = (look: TextLook): boolean => !!look.box || !!look.bar;
+
+// The look drawn in place of a look without a background (every text overlay has one): the table is exact and shared
+// with the phone. A look not in it, without a background, is drawn as `solid_round`.
+export const BOXED_LOOK: Record<string, string> = {
+  sticker: 'tilt_sticker',
+  '3d': 'gradient_block',
+  glow: 'neon_box',
+  gradient: 'gradient_block',
+};
+const DEFAULT_BOXED_LOOK = 'solid_round';
+
+// The id of the look a text is drawn with: the look itself when it has a background (or is not in `looks`), else its
+// entry of `BOXED_LOOK`, else `solid_round`.
+export const boxedLookId = (id: string, looks: TextLook[] = TEXT_LOOKS): string => {
+  const entry = textLookById(id, looks);
+  return !entry || hasBackground(entry) ? id : (BOXED_LOOK[id] ?? DEFAULT_BOXED_LOOK);
+};
+
 // Whether a phone with these capabilities draws `look`: it listed the look and every feature the look needs (an absent
 // or null `text_features` list means no feature). No capabilities at all means no gate (an unlisted plan context).
 export const lookUsable = (

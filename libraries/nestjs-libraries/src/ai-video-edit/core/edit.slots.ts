@@ -58,6 +58,12 @@ export const LONG_WORD_CHARS = 8;
 // The id of the hook slot.
 export const HOOK_SLOT_ID = 'h1';
 
+// How much a slot is worth when the planner chooses among them: its score, and twice the probability that perception
+// found its word emphasised (`emphasis`: word index to probability). The assembler, the writer and the icon search all
+// rank slots with this one formula, so the slots searched are the slots the assembler walks first.
+export const priority = (slot: Slot, emphasis?: Record<number, number>) =>
+  slot.score + 2 * (emphasis?.[slot.word_index] || 0);
+
 const EDGE = new RegExp('^[^\\p{L}\\p{M}\\p{N}]+|[^\\p{L}\\p{M}\\p{N}]+$', 'gu');
 const DIGIT = new RegExp('[0-9\\u09E6-\\u09EF]');
 

@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import type { z } from 'zod/v4';
 import {
+  EditDirection,
+  EditDirectionSchema,
   EditIconPicks,
   EditLlmClient,
   EditLlmEffort,
@@ -10,6 +12,7 @@ import {
   EditTextsDraft,
   EditTextsSchema,
   IconPicksSchema,
+  splitSystem,
 } from '@gitroom/nestjs-libraries/ai-video-edit/edit.llm';
 import {
   LlmUsage,
@@ -26,6 +29,8 @@ const MAX_TOKENS = 16000;
 // (2 minutes): 60 s per try, as the OpenAI picker.
 const WRITER_TIMEOUT_MS = 240 * 1000;
 const PICKER_TIMEOUT_MS = 60 * 1000;
+// The director runs in directEdit, in an activity with the writer's 10 minutes: the writer's timeout.
+const DIRECTOR_TIMEOUT_MS = WRITER_TIMEOUT_MS;
 
 // The answer of a call as the schema's shape: only a finished answer that is valid JSON of that shape is an answer. A
 // refusal, a cut-off answer, an empty one or text that is not the shape is null (the text is never logged).
@@ -83,6 +88,22 @@ export class AnthropicService implements EditLlmClient {
     );
   }
 
+  directEdit(
+    model: string,
+    effort: EditLlmEffort,
+    messages: EditLlmMessage[],
+    usage?: LlmUsage[]
+  ): Promise<EditDirection | null> {
+    return this.complete(
+      model,
+      effort,
+      messages,
+      EditDirectionSchema,
+      DIRECTOR_TIMEOUT_MS,
+      usage
+    );
+  }
+
   private async complete<T>(
     model: string,
     effort: EditLlmEffort,
@@ -93,6 +114,7 @@ export class AnthropicService implements EditLlmClient {
   ): Promise<T | null> {
     const startedAt = Date.now();
     const inputChars = jsonChars(messages);
+    const { system, rest } = splitSystem(messages);
     try {
       const response = await new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY,
@@ -102,7 +124,8 @@ export class AnthropicService implements EditLlmClient {
           max_tokens: MAX_TOKENS,
           thinking: { type: 'adaptive' },
           output_config: { effort, format: zodOutputFormat(schema) },
-          messages,
+          ...(system ? { system } : {}),
+          messages: rest,
         },
         { timeout, maxRetries: 1 }
       );

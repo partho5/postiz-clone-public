@@ -87,7 +87,8 @@ const FROZEN_PALETTE: Record<string, unknown> = {
 };
 
 // The seventeen x_* text effects released to installed phones, every field of the registry entry as shipped. Motion
-// tables (hold, exit, new entries) are not here: they are params chosen per item, not shipped defaults.
+// tables (hold, exit, new entries) are not here: they are params chosen per item, not shipped defaults. TS13 changed the
+// bound `style_preset` of five of them on purpose (every text look has a background): the look ids only, see `BOXED_LOOK`.
 const FROZEN_EFFECTS: Record<string, Record<string, unknown>> = {
   x_marker_sweep: {
     id: 'x_marker_sweep',
@@ -207,7 +208,7 @@ const FROZEN_EFFECTS: Record<string, Record<string, unknown>> = {
     cost: 'L',
     min_duration_ms: 500,
     max_duration_ms: 2500,
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'sticker' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'tilt_sticker' },
     param_limits: { entry_ms: [120, 300] },
     cooldown_ms: 3000,
     max_per_video: 6,
@@ -225,7 +226,7 @@ const FROZEN_EFFECTS: Record<string, Record<string, unknown>> = {
     cost: 'L',
     min_duration_ms: 500,
     max_duration_ms: 2500,
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: '3d' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'gradient_block' },
     param_limits: { entry_ms: [120, 300] },
     cooldown_ms: 3000,
     max_per_video: 4,
@@ -243,7 +244,7 @@ const FROZEN_EFFECTS: Record<string, Record<string, unknown>> = {
     cost: 'L',
     min_duration_ms: 500,
     max_duration_ms: 2500,
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'glow' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'neon_box' },
     param_limits: { entry_ms: [120, 300] },
     cooldown_ms: 3000,
     max_per_video: 4,
@@ -261,7 +262,7 @@ const FROZEN_EFFECTS: Record<string, Record<string, unknown>> = {
     cost: 'L',
     min_duration_ms: 500,
     max_duration_ms: 2500,
-    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'gradient' },
+    default_params: { entry: 'pop', entry_ms: 200, exit_ms: 150, style_preset: 'gradient_block' },
     param_limits: { entry_ms: [120, 300] },
     cooldown_ms: 3000,
     max_per_video: 4,
@@ -297,7 +298,7 @@ const FROZEN_EFFECTS: Record<string, Record<string, unknown>> = {
     cost: 'L',
     min_duration_ms: 500,
     max_duration_ms: 2500,
-    default_params: { entry: 'pop', entry_ms: 220, exit_ms: 150, style_preset: 'sticker', tilt_deg: 6 },
+    default_params: { entry: 'pop', entry_ms: 220, exit_ms: 150, style_preset: 'tilt_sticker', tilt_deg: 6 },
     param_limits: { entry_ms: [120, 300], tilt_deg: [3, 6] },
     cooldown_ms: 3000,
     max_per_video: 4,
@@ -450,6 +451,12 @@ describe('ai.video-editing: the snapshot gate of shipped looks, palette and effe
 
 describe('ai.video-editing: the snapshot gate fails when it must, and allows what it must', () => {
   const live = (id: string) => EFFECTS.find((effect) => effect.id === id) as RegistryEntry;
+
+  it('lets a released x_* effect stay under its id when optional fields grow beside its old ones', () => {
+    const grown = { ...live('x_pop'), describe: 'plain words', moments: ['claim'], styles: ['calm'], in_drawing: false };
+    expect(changedFields(FROZEN_EFFECTS.x_pop, grown)).toEqual([]);
+    expect(live('x_pop').styles).toBeUndefined();
+  });
 
   it('fails with "add a new id" when a released look, effect or palette value is changed, retyped or removed', () => {
     const sticker = TEXT_LOOKS.find((look) => look.id === 'sticker') as TextLook;

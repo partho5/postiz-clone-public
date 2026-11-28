@@ -43,13 +43,16 @@ import {
 import {
   ClefAnswers,
   ClefQuestion,
+  PickAsk,
   PieceTarget,
   batches,
   commentaryQuestions,
   mergePieces,
   pieceQuestions,
+  pickQuestions,
   readPiece,
   targetsByPiece,
+  withFallbackPicks,
 } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.perception';
 import {
   PlanEditInput,
@@ -62,12 +65,15 @@ import {
   readTexts,
   writerSlots,
 } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.texts';
+import { Direction, Moment, applyLabels, buildMoments } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.moments';
+import { buildMap } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.timeline';
 import { toEditWords } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.words';
+import { EDIT_DIRECTOR_PROMPT, directorMessages } from '@gitroom/nestjs-libraries/ai-video-edit/edit.director.prompt';
 import { EDIT_WRITER_PROMPT, writerMessages } from '@gitroom/nestjs-libraries/ai-video-edit/edit.writer.prompt';
 import { LlmUsage } from '@gitroom/nestjs-libraries/ai-video-edit/llm.usage';
 import { BrandsService } from '@gitroom/nestjs-libraries/database/prisma/brands/brands.service';
 import { EditLlmService } from '@gitroom/nestjs-libraries/ai-video-edit/edit.llm.service';
-import { EditTextsDraft, iconEditLlm, writerEditLlm } from '@gitroom/nestjs-libraries/ai-video-edit/edit.llm';
+import { EditDirection, EditTextsDraft, directorEditLlm, iconEditLlm, writerEditLlm } from '@gitroom/nestjs-libraries/ai-video-edit/edit.llm';
 import {
   AiVideoEditsRepository,
   NewAiVideoEdit,
@@ -86,6 +92,7 @@ import {
   clientCheckTrace,
   correlation,
   failureCause,
+  iconsTrace,
   plannerInputTrace,
   plannerTrace,
   usageOfLog,
@@ -95,6 +102,7 @@ import {
 import {
   TraceBundle,
   bundleOf,
+  requestForTrace,
 } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edit.trace.bundle';
 import { AiCaptionsService } from '@gitroom/nestjs-libraries/database/prisma/ai-captions/ai.captions.service';
 import { AiChargingService } from '@gitroom/nestjs-libraries/database/prisma/credits/ai/ai.charging.service';
@@ -404,7 +412,7 @@ export class AiVideoEditsService {
           audioUploadId: body.audioUploadId ?? null,
           proxyUploadIds,
           replacedEditId: replaced ?? null,
-          request: body.request,
+          request: requestForTrace(body.request),
         },
       },
       requestId
@@ -461,7 +469,7 @@ export class AiVideoEditsService {
     );
 
     try {
-      await client.workflow.start('aiVideoEditWorkflow', {
+      await client.workflow.start('aiVideoEditWorkflowV101', {
         workflowId: workflowIdOf(edit.id),
         taskQueue: 'main',
         args: [{ editId: edit.id }],
@@ -787,6 +795,17 @@ export class AiVideoEditsService {
         kind: 'decision',
         payload: { decision: 'skipped', reason_code: skipped, level: edit.level },
       });
+      // the director's moments still get their effects, from the rotation, when Clef-omni cannot be asked
+      if (skipped === 'no_proxies' || skipped === 'clef_not_configured') {
+        const picked = await this.fillPicks(edit, undefined, skipped);
+        if (picked) {
+          await this._aiVideoEditsRepository.updateEdit(
+            edit.organizationId,
+            edit.id,
+            { scores: picked as unknown as Prisma.InputJsonValue }
+          );
+        }
+      }
     } else {
       const started = Date.now();
       let scores: SlotScores | undefined;
@@ -803,6 +822,13 @@ export class AiVideoEditsService {
         await this.traceError(edit, 'perceive', err, Date.now() - started);
       }
       await this.ledger(edit, 'perceive', usage);
+      const answered = !!scores;
+      // a moment Clef-omni did not answer gets the candidate its rotation names
+      scores = await this.fillPicks(
+        edit,
+        scores,
+        failed ? 'perception_failed' : 'pick_not_answered'
+      );
       if (scores) {
         await this._aiVideoEditsRepository.updateEdit(
           edit.organizationId,
@@ -814,10 +840,10 @@ export class AiVideoEditsService {
         step: 'perceive',
         kind: 'output',
         durationMs: Date.now() - started,
-        ok: !failed && !!scores,
+        ok: !failed && answered,
         payload: { model: CLEF_MODEL, scores: scores ?? null },
       });
-      if (!scores) {
+      if (!answered) {
         await this.trace(edit, {
           step: 'perceive',
           kind: 'decision',
@@ -832,6 +858,162 @@ export class AiVideoEditsService {
     for (const id of edit.proxyUploadIds) {
       await this.removeUpload(edit, id);
     }
+  }
+
+  // The second activity of the trust-first edit: the director labels the sentences of the kept words (hook, claim,
+  // reason, ...) and picks the style of the video (calm or lively); the labelled moments are kept in `moments` for
+  // perception and the planner to read. Standard and Heavy only. A failure, a refusal or a server without the
+  // director's key only means no direction: `{ source: 'none' }` is kept (or nothing, when it never asked) and the
+  // plan is made as it is without one. Repeating it after the moments are kept changes nothing.
+  async directEdit(editId: string) {
+    const edit = await this.job(editId);
+    return this.instrument(edit, 'direct', () => this.directStep(edit));
+  }
+
+  // The body of `directEdit`, on the job it found.
+  private async directStep(edit: StoredEdit) {
+    const llm = directorEditLlm();
+    const skipped = FINAL_STATUSES.includes(edit.status as EditStatus)
+      ? 'job_ended'
+      : edit.moments !== null
+        ? 'moments_already_kept'
+        : !LEVEL_RULES[edit.level as EditLevel]?.director
+          ? 'level_without_director'
+          : !this._editLlm.isConfigured(llm)
+            ? 'director_not_configured'
+            : !this.words(edit).length
+              ? 'no_words'
+              : undefined;
+    if (skipped) {
+      await this.trace(edit, {
+        step: 'direct',
+        kind: 'decision',
+        payload: { decision: 'skipped', reason_code: skipped, level: edit.level },
+      });
+      return;
+    }
+    const started = Date.now();
+    let direction: Direction = { style: 'calm', moments: [], source: 'none' };
+    let reason = 'director_failed';
+    const usage: LlmUsage[] = [];
+    try {
+      const directed = await this.direct(edit, llm, usage);
+      if (directed) {
+        direction = directed;
+      } else {
+        reason = 'no_usable_answer';
+      }
+    } catch (err) {
+      // only the kind of failure is logged, never what was asked or answered
+      this._logger.warn(`The director of edit ${edit.id} failed: ${(err as Error).name}`);
+      // the cause only (class and code), not the message: a provider's message may echo what it was asked
+      await this.trace(edit, {
+        step: 'direct',
+        kind: 'error',
+        durationMs: Date.now() - started,
+        ok: false,
+        payload: failureCause(err, 'direct', activityTrace().attempt),
+      });
+    }
+    await this.ledger(edit, 'direct', usage);
+    // the edit never fails here: without a direction `{ source: 'none' }` is kept and the plan is made without one
+    await this._aiVideoEditsRepository.updateEdit(edit.organizationId, edit.id, {
+      moments: (direction.source === 'director'
+        ? this.storedDirection(direction)
+        : { source: 'none' }) as unknown as Prisma.InputJsonValue,
+    });
+    const counts: Record<string, number> = {};
+    for (const m of direction.moments) {
+      counts[m.label] = (counts[m.label] ?? 0) + 1;
+    }
+    await this.trace(edit, {
+      step: 'direct',
+      kind: 'decision',
+      durationMs: Date.now() - started,
+      payload: {
+        decision: 'direct',
+        style: direction.source === 'director' ? direction.style : null,
+        source: direction.source,
+        counts,
+        ...(direction.source === 'none' ? { reason_code: reason, effect_code: 'plan_without_direction' } : {}),
+      },
+    });
+  }
+
+  // The director's direction for the job: the moments built on the SOURCE timeline (source words, the request's
+  // activity map and chapters as they are, an identity map: `silenceCuts` shortens the gaps of the output, which would
+  // hide the pauses that end a sentence), the model's labels laid on them. No direction when the model gave no answer.
+  private async direct(
+    edit: StoredEdit,
+    llm: ReturnType<typeof directorEditLlm>,
+    usage: LlmUsage[]
+  ): Promise<Direction | undefined> {
+    const request = this.request(edit);
+    const words = this.words(edit);
+    const moments = buildMoments(
+      words,
+      Array.isArray(request.activity_map) ? request.activity_map : [],
+      request.chapters,
+      buildMap(request.video.duration_ms, [])
+    );
+    const sentences = moments.filter((m) => m.kind === 'sentence');
+    const drawings = moments.filter((m) => m.kind === 'drawing');
+    const language = edit.language ?? request.language;
+    const promptVersion = createHash('sha256').update(EDIT_DIRECTOR_PROMPT).digest('hex').slice(0, 12);
+    await this.trace(edit, {
+      step: 'direct',
+      kind: 'input',
+      payload: {
+        model: llm.model,
+        promptVersion,
+        language: language ?? null,
+        sentences: sentences.length,
+        drawings: drawings.length,
+        chapters: moments.length - sentences.length - drawings.length,
+      },
+    });
+    const started = Date.now();
+    const used: LlmUsage[] = [];
+    let answer: EditDirection | null;
+    try {
+      answer = await this._editLlm.directEdit(
+        llm,
+        directorMessages({ sentences, words, chapters: request.chapters, drawings, language }),
+        used
+      );
+    } finally {
+      usage.push(...used.map((u) => ({ ...u, work: `director labels for ${sentences.length} sentences` })));
+    }
+    const direction: Direction | undefined = answer
+      ? { style: answer.style, moments: applyLabels(moments, answer), source: 'director' }
+      : undefined;
+    // the answer holds the style and the labels of the ids only, no text
+    await this.trace(edit, {
+      step: 'direct',
+      kind: 'output',
+      durationMs: Date.now() - started,
+      ok: !!direction,
+      payload: { model: llm.model, promptVersion, answer: answer ?? null },
+    });
+    return direction;
+  }
+
+  // What is kept of a direction: times, word indexes, regions and labels, never a word, a title or a note.
+  private storedDirection(direction: Direction) {
+    return {
+      style: direction.style,
+      source: direction.source,
+      moments: direction.moments.map((m: Moment) => ({
+        id: m.id,
+        kind: m.kind,
+        start_ms: m.start_ms,
+        end_ms: m.end_ms,
+        word_from: m.word_from,
+        word_to: m.word_to,
+        region: m.region,
+        label: m.label,
+      })),
+    };
   }
 
   // The third activity: writes the Heavy texts (a hook and a complementary phrase per slot, with icon queries) in the
@@ -926,6 +1108,7 @@ export class AiVideoEditsService {
       palette: paletteFor(request.text_colors, brand?.color),
       scores,
       texts,
+      direction: this.direction(edit),
       assets: { sounds: resolved.sounds, icons: resolved.icons },
       planAssets: resolved.planAssets,
       bannedWords: brand?.bannedWords.length ? brand.bannedWords : undefined,
@@ -945,7 +1128,11 @@ export class AiVideoEditsService {
     let rows: TraceEntry[] = [];
     try {
       // the inputs first, so a `full` trace can replay the plan (`structure/input`)
-      rows = [plannerInputTrace(planInput), ...plannerTrace(result)];
+      rows = [
+        plannerInputTrace(planInput),
+        ...plannerTrace(result),
+        iconsTrace(result, texts, resolved.searched, Object.keys(resolved.icons).length),
+      ];
     } catch (err) {
       // a trace is never worth a failed step, and the plan is kept
       this._logger.warn(`The planner trace rows could not be built: ${(err as Error)?.name}`);
@@ -1266,16 +1453,17 @@ export class AiVideoEditsService {
     request: EditRequest,
     scores?: SlotScores,
     texts?: WrittenTexts
-  ): Promise<ResolvedAssets> {
+  ): Promise<ResolvedAssets & { searched: number }> {
     const level = edit.level as EditLevel;
     const started = Date.now();
     const usage: LlmUsage[] = [];
+    let searched = 0;
     try {
-      const { slots } = perceptionTargets(request, this.words(edit));
+      const { slots, durationMs, direction } = perceptionTargets(request, this.words(edit), this.direction(edit));
       const input = {
         level,
         soundEffects: request.options?.sound_effects,
-        queries: iconQueries(slots, level, scores, texts),
+        queries: iconQueries(slots, level, durationMs, scores, texts, direction),
         texts: slotTexts(texts),
       };
       await this.trace(edit, {
@@ -1302,6 +1490,7 @@ export class AiVideoEditsService {
           planAssets: resolved.planAssets.map((a) => ({ id: a.id, kind: a.kind })),
         },
       });
+      searched = Object.keys(input.queries).length;
       for (const item of report) {
         const chosen = ['remembered', 'cache_hit', 'stored'].includes(item.outcome_code);
         await this.trace(edit, {
@@ -1314,7 +1503,7 @@ export class AiVideoEditsService {
           },
         });
       }
-      return resolved;
+      return { ...resolved, searched };
     } catch (err) {
       this._logger.warn(`The assets of edit ${edit.id} failed: ${(err as Error).name}`);
       await this.traceError(edit, 'assets', err, Date.now() - started);
@@ -1323,7 +1512,7 @@ export class AiVideoEditsService {
         kind: 'decision',
         payload: { decision: 'fallback_no_assets', reason_code: 'resolver_failed', effect_code: 'plan_without_icons_and_sounds' },
       });
-      return { icons: {}, sounds: [], planAssets: [] };
+      return { icons: {}, sounds: [], planAssets: [], searched: 0 };
     } finally {
       await this.ledger(edit, 'assets', usage);
     }
@@ -1332,10 +1521,11 @@ export class AiVideoEditsService {
   // The writer's one call: asks for a text per slot (the hook and the best scored) with the brand voice and banned
   // words, and reads the answer. Undefined when the writer wrote nothing usable.
   private async write(edit: StoredEdit, usage: LlmUsage[]): Promise<WrittenTexts | undefined> {
-    const { words, slots } = perceptionTargets(this.request(edit), this.words(edit));
+    const { words, slots, durationMs, direction } = perceptionTargets(this.request(edit), this.words(edit), this.direction(edit));
     const asked = writerSlots(
       slots,
       edit.level as EditLevel,
+      durationMs,
       (edit.scores as unknown as SlotScores | null) ?? undefined
     );
     if (!asked.length) {
@@ -1371,6 +1561,9 @@ export class AiVideoEditsService {
         writerMessages({
           words,
           slots: asked,
+          level: edit.level as EditLevel,
+          durationMs,
+          direction,
           language: edit.language ?? undefined,
           voice: brand?.voice,
           bannedWords,
@@ -1404,6 +1597,55 @@ export class AiVideoEditsService {
     return texts;
   }
 
+  // The director's direction kept for the job; none when it was never asked or gave nothing (`{ source: 'none' }`).
+  private direction(edit: StoredEdit): Direction | undefined {
+    const kept = edit.moments as unknown as Direction | null;
+    return kept && kept.source === 'director' && Array.isArray(kept.moments) ? kept : undefined;
+  }
+
+  // The pick questions of each of `count` proxy pieces (at least one, empty without a direction): the moments of the
+  // direction on the source timeline, the effects the level, the phone and the style allow, a facecam move only when
+  // the recording has a facecam track.
+  private pickAsks(edit: StoredEdit, count: number): PickAsk[][] {
+    const request = this.request(edit);
+    return pickQuestions(
+      this.direction(edit),
+      {
+        level: edit.level as EditLevel,
+        capabilities: request.capabilities,
+        facecam: Array.isArray(request.facecam_track) && request.facecam_track.length > 0,
+      },
+      request.video.duration_ms,
+      count
+    );
+  }
+
+  // The scores with a fallback pick for every pick question that got no valid answer, and the decision traced (ids and
+  // counts only). Without a direction the scores come back as they were.
+  private async fillPicks(
+    edit: StoredEdit,
+    scores: SlotScores | undefined,
+    reason: string
+  ): Promise<SlotScores | undefined> {
+    const asks = this.pickAsks(edit, edit.proxyUploadIds.length).flat();
+    const { scores: filled, filled: picks } = withFallbackPicks(scores, asks);
+    if (Object.keys(picks).length) {
+      await this.trace(edit, {
+        step: 'perceive',
+        kind: 'decision',
+        payload: {
+          decision: 'pick_fallback',
+          reason_code: reason,
+          effect_code: 'rotation_over_candidates',
+          asked: asks.length,
+          filled: Object.keys(picks).length,
+          picks,
+        },
+      });
+    }
+    return filled;
+  }
+
   // The scores of the whole video: the questions of each proxy piece asked in turn (a few pieces at a time), the
   // answers read into scores and merged. A piece whose questions all fail adds nothing; undefined when no piece
   // gave anything.
@@ -1411,7 +1653,8 @@ export class AiVideoEditsService {
     const request = this.request(edit);
     const { words, slots, sourceMs } = perceptionTargets(
       request,
-      this.words(edit)
+      this.words(edit),
+      this.direction(edit)
     );
     const count = edit.proxyUploadIds.length;
     const pieces = targetsByPiece(
@@ -1421,6 +1664,7 @@ export class AiVideoEditsService {
       request.video.duration_ms,
       count
     );
+    const picks = this.pickAsks(edit, count);
     await this.trace(edit, {
       step: 'perceive',
       kind: 'input',
@@ -1431,6 +1675,7 @@ export class AiVideoEditsService {
           piece: index,
           uploadId: edit.proxyUploadIds[index],
           slots: targets.length,
+          picks: picks[index].length,
         })),
       },
     });
@@ -1456,7 +1701,7 @@ export class AiVideoEditsService {
         pieces
           .slice(k, k + PERCEPTION_PARALLEL)
           .map((targets, j) =>
-            this.perceivePiece(edit, edit.proxyUploadIds[k + j], targets, k + j, usage)
+            this.perceivePiece(edit, edit.proxyUploadIds[k + j], targets, picks[k + j], k + j, usage)
           )
       );
       results.push(...group.filter((r): r is SlotScores => !!r));
@@ -1471,6 +1716,7 @@ export class AiVideoEditsService {
     edit: StoredEdit,
     uploadId: string,
     targets: PieceTarget[],
+    picks: PickAsk[],
     index: number,
     usage: LlmUsage[]
   ): Promise<SlotScores | undefined> {
@@ -1501,7 +1747,8 @@ export class AiVideoEditsService {
       await dropped('read_failed');
       return undefined;
     }
-    const first = pieceQuestions(targets);
+    // the pick questions come after the piece's own, so a call over the limit only moves the picks to the next call
+    const first = [...pieceQuestions(targets), ...picks.map((a) => a.question)];
     await this.trace(edit, {
       step: 'perceive',
       kind: 'input',
@@ -1511,6 +1758,7 @@ export class AiVideoEditsService {
         bytes: video.length,
         model: CLEF_MODEL,
         targets: targets.length,
+        picks: picks.length,
         questions: first.length,
         questionsHash: questionsHash(first),
       },
@@ -1542,7 +1790,7 @@ export class AiVideoEditsService {
       ),
       `perception commentary of slot piece ${index}`
     );
-    const scores = readPiece(answers);
+    const scores = readPiece(answers, picks);
     const kept = Object.keys(scores).length ? scores : undefined;
     await this.trace(edit, {
       step: 'perceive',
@@ -1769,7 +2017,7 @@ export class AiVideoEditsService {
         video: request.video,
         outputs: request.outputs,
         source_duration_ms: request.video.duration_ms,
-        word_count: perceptionTargets(request, this.words(edit)).words.length,
+        word_count: perceptionTargets(request, this.words(edit), this.direction(edit)).words.length,
         language: edit.language ?? request.language,
         capabilities: request.capabilities,
       });

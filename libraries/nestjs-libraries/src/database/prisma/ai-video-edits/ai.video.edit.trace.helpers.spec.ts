@@ -7,6 +7,8 @@ import {
   activityTrace,
   correlation,
   failureCause,
+  iconsTrace,
+  plannerInputTrace,
   plannerTrace,
   requestIdOf,
   writerDecisions,
@@ -192,6 +194,76 @@ describe('ai.video-editing: trace helpers', () => {
 });
 
 // L4: the app version of a request and the trace rows of a client check.
+// TS2: the planner input row holds the request, with its chapters reduced to counts.
+describe('ai.video-editing: plannerInputTrace chapters', () => {
+  const f = GOLDEN_FIXTURES[0];
+  const chapters = [
+    { start_ms: 0, kind: 'text' as const, title: 'Synthetic title', note: 'Synthetic note' },
+    { start_ms: 4000, kind: 'image' as const },
+  ];
+  const input = (withChapters: boolean) => ({
+    sessionId: 's1',
+    level: 'heavy' as const,
+    request: { ...goldenRequest(f), ...(withChapters ? { chapters } : {}) },
+    words: toEditWords(f.words),
+    palette: MULTI_PALETTE,
+  });
+
+  it('replaces the chapters by their counts and holds no title or note', () => {
+    const payload = plannerInputTrace(input(true)).payload as any;
+    expect(payload.request.chapters).toEqual({ count: 2, with_title: 1, with_note: 1 });
+    expect(JSON.stringify(payload)).not.toContain('Synthetic');
+  });
+
+  it('leaves a request without chapters as it is', () => {
+    const payload = plannerInputTrace(input(false)).payload as any;
+    expect(payload.request).toEqual(goldenRequest(f));
+    expect('chapters' in payload.request).toBe(false);
+  });
+});
+
+// TS6a: the planner input row keeps the direction (times, word indexes and labels only), so a golden replay can plan it again.
+describe('ai.video-editing: plannerInputTrace direction', () => {
+  it('holds the direction as kept and carries the style budget of the planner in the assemble output', () => {
+    const f = GOLDEN_FIXTURES[0];
+    const direction = {
+      style: 'calm' as const,
+      source: 'director' as const,
+      moments: [{ id: 's1', kind: 'sentence' as const, start_ms: 0, end_ms: 900, word_from: 0, word_to: 2, label: 'hook' as const }],
+    };
+    const input = { sessionId: 's1', level: 'heavy' as const, request: goldenRequest(f), words: toEditWords(f.words), palette: MULTI_PALETTE, direction };
+    expect((plannerInputTrace(input).payload as any).direction).toEqual(direction);
+    const rows = plannerTrace(planAndValidate(input));
+    const output = rows.find((r) => r.step === 'assemble' && r.kind === 'output')!.payload as any;
+    expect(output.direction).toMatchObject({ style: 'calm', cut_transitions: { code: 'style_calm', placed: 0 } });
+  });
+
+  // TS6b: the moment pass's decisions follow the slots' decisions and are not counted as slots
+  it('counts only the slots in the assemble output, and writes a decision row for a moment pick', () => {
+    const f = GOLDEN_FIXTURES[0];
+    const direction = {
+      style: 'calm' as const,
+      source: 'director' as const,
+      moments: [{ id: 's1', kind: 'sentence' as const, start_ms: 0, end_ms: 900, word_from: 0, word_to: 2, label: 'claim' as const }],
+    };
+    const input = {
+      sessionId: 's1',
+      level: 'heavy' as const,
+      request: goldenRequest(f),
+      words: toEditWords(f.words),
+      palette: MULTI_PALETTE,
+      direction,
+      scores: { picks: { s1: 'v_push_in' } },
+    };
+    const result = planAndValidate(input);
+    const rows = plannerTrace(result);
+    const output = rows.find((r) => r.step === 'assemble' && r.kind === 'output')!.payload as any;
+    expect(output.slots).toBe(result.planner!.structure.slots.length);
+    const lines = rows.filter((r) => r.step === 'assemble' && r.kind === 'decision').map((r) => (r.payload as any).slot_id);
+    expect(lines.filter((id: string) => id === 'moment:s1')).toHaveLength(1);
+  });
+});
+
 describe('ai.video-editing: trace helpers (L4)', () => {
   describe('appVersionOf', () => {
     it('keeps a version, the first of a list, and drops what is not a version or is too long', () => {
@@ -354,5 +426,52 @@ describe('ai.video-editing: usage ledger helpers (L7)', () => {
 
       expect(read).toMatchObject({ calls: 2, total_input_tokens: 0, total_output_tokens: 0, by_step: { write: { calls: 2, input_tokens: 0, output_tokens: 0 } } });
     });
+  });
+});
+
+// TS11: the decision that says why a video got the icons it got.
+describe('ai.video-editing: iconsTrace', () => {
+  const f = GOLDEN_FIXTURES[0];
+  const planned = planAndValidate({
+    sessionId: 's1',
+    level: 'heavy',
+    request: goldenRequest(f),
+    words: toEditWords(f.words),
+    palette: MULTI_PALETTE,
+  });
+  // a 3-minute Heavy plan with two icons, and an assembler that could not place three more, for two reasons
+  const icon = { ...planned.plan.items[0], layer: 'icon' as const };
+  const result = {
+    ...planned,
+    plan: { ...planned.plan, level: 'heavy' as const, video: { output_duration_ms: 3 * 60_000 }, items: [icon, icon] },
+    planner: { ...planned.planner!, icon_misses: { icon_budget: 1, clip_too_long_for_slot: 2 } },
+  };
+  const written = { icon_queries: { s1: 'synthetic scene one', s2: 'synthetic scene two', s3: 'synthetic scene three' } };
+
+  it('holds the budget, the counts and the misses by code, on the plan step', () => {
+    expect(iconsTrace(result, written, 6, 4)).toEqual({
+      step: 'plan',
+      kind: 'decision',
+      payload: {
+        decision: 'icons',
+        budget: 12,
+        written_queries: 3,
+        searched: 6,
+        found: 4,
+        placed: 2,
+        misses: { icon_budget: 1, clip_too_long_for_slot: 2, no_icon_for_slot: 2 },
+      },
+    });
+  });
+
+  it('counts a writer that did not run as no queries, and notes no search miss when every search found a file', () => {
+    const row = iconsTrace(result, undefined, 4, 4).payload as any;
+    expect(row.written_queries).toBe(0);
+    expect(row.misses).not.toHaveProperty('no_icon_for_slot');
+  });
+
+  it('holds no query text', () => {
+    const json = JSON.stringify(iconsTrace(result, written, 6, 4));
+    expect(json).not.toContain('synthetic');
   });
 });

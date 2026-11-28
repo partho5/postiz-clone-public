@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
+import { MuseChatService } from '@gitroom/nestjs-libraries/muse/muse.chat.service';
 import { OpenaiService } from '@gitroom/nestjs-libraries/openai/openai.service';
 import {
+  EditDirection,
   EditIconPicks,
   EditLlmClient,
   EditLlmMessage,
@@ -20,9 +22,14 @@ export class EditLlmService {
 
   constructor(
     private _openai: OpenaiService,
-    private _anthropic: AnthropicService
+    private _anthropic: AnthropicService,
+    private _muse: MuseChatService
   ) {
-    this._clients = { openai: this._openai, anthropic: this._anthropic };
+    this._clients = {
+      openai: this._openai,
+      anthropic: this._anthropic,
+      meta: this._muse,
+    };
   }
 
   // Whether the option can run: its provider's key is set.
@@ -51,6 +58,20 @@ export class EditLlmService {
     usage?: LlmUsage[]
   ): Promise<EditIconPicks | null> {
     return this._clients[option.provider].pickEditIcons(
+      option.model,
+      option.effort,
+      messages,
+      usage
+    );
+  }
+
+  // The director's call: the style and the sentence labels, or null when the model refused or answered nothing usable.
+  directEdit(
+    option: EditLlmOption,
+    messages: EditLlmMessage[],
+    usage?: LlmUsage[]
+  ): Promise<EditDirection | null> {
+    return this._clients[option.provider].directEdit(
       option.model,
       option.effort,
       messages,

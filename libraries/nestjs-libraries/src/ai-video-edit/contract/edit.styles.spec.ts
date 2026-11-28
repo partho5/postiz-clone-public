@@ -7,7 +7,10 @@ import { ColorRole, FillSpec, ShadowSpec, TextLook } from './edit.contract';
 import { contractView } from './edit.contract.view';
 import {
   BASELINE_EXTENT,
+  BOXED_LOOK,
+  boxedLookId,
   contrastRatio,
+  hasBackground,
   lookContrast,
   lookExtent,
   lookSizeFactor,
@@ -460,5 +463,35 @@ describe('ai.video-editing: contractView serves the old and the new format', () 
 
   it('keeps colour roles only, never a fixed colour, in the looks', () => {
     expect(JSON.stringify(view.text_styles)).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+  });
+});
+
+describe('ai.video-editing: every text look has a background (TS13)', () => {
+  it('says a look has a background when it has a box or a bar, and only those without one are mapped', () => {
+    expect(TEXT_LOOKS.filter((look) => !hasBackground(look)).map((look) => look.id)).toEqual(['sticker', '3d', 'glow', 'gradient']);
+    expect(hasBackground(textLookById('highlighter') as TextLook)).toBe(true);
+    expect(hasBackground(textLookById('label_pill') as TextLook)).toBe(true);
+    for (const look of added()) expect(hasBackground(look)).toBe(true);
+    expect(Object.keys(BOXED_LOOK).sort()).toEqual(['3d', 'glow', 'gradient', 'sticker']);
+  });
+
+  it('maps a look without a background exactly as the phone does, and keeps every other look', () => {
+    expect(boxedLookId('sticker')).toBe('tilt_sticker');
+    expect(boxedLookId('3d')).toBe('gradient_block');
+    expect(boxedLookId('glow')).toBe('neon_box');
+    expect(boxedLookId('gradient')).toBe('gradient_block');
+    for (const look of TEXT_LOOKS.filter(hasBackground)) expect(boxedLookId(look.id)).toBe(look.id);
+    expect(boxedLookId('highlighter')).toBe('highlighter');
+  });
+
+  it('maps to looks that exist and have a background, and any other look without one to solid_round', () => {
+    for (const target of Object.values(BOXED_LOOK)) {
+      const look = textLookById(target);
+      expect(look).toBeDefined();
+      expect(hasBackground(look as TextLook)).toBe(true);
+    }
+    const bare = { ...(textLookById('sticker') as TextLook), id: 'bare_look' };
+    expect(boxedLookId('bare_look', [...TEXT_LOOKS, bare])).toBe('solid_round');
+    expect(boxedLookId('unlisted_look')).toBe('unlisted_look');
   });
 });

@@ -2,7 +2,11 @@
 // validator checks them with (spec sections 12 and 17): overlap and concurrency, cooldowns, duration bounds, and the
 // visible changes of the timeline the pacing rule counts. Pure functions, no Nest or Prisma import.
 import {
+  EditLevel,
+  EditStyle,
   EditWord,
+  EffectLayer,
+  LEVEL_RULES,
   PlanComponent,
   PlanItem,
   RegistryEntry,
@@ -92,14 +96,83 @@ export const concurrencyConflict = (
   return null;
 };
 
+// A colour written as `#RRGGBB`.
+export const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
+// Rule 18, breathing gap: video, facecam and transition items (looks are video items) leave `BREATHING_GAP_MS` between the end
+// of one and the start of the next; text, icons and captions do not count.
+export const BREATHING_LAYERS: EffectLayer[] = ['video', 'facecam', 'transition'];
+export const BREATHING_GAP_MS = 1000;
+
+// The placed items that crowd `cand` (rule 18): one of the breathing layers closer than `BREATHING_GAP_MS`, overlapping
+// included. `exempt` names the items that may share time with it (the other item of the same drawing moment).
+export const crowding = (
+  placed: PlanItem[],
+  cand: PlanItem,
+  exempt: (p: PlanItem) => boolean = () => false
+): PlanItem[] =>
+  !BREATHING_LAYERS.includes(cand.layer)
+    ? []
+    : placed.filter(
+        (p) =>
+          BREATHING_LAYERS.includes(p.layer) &&
+          !exempt(p) &&
+          Math.max(cand.start_ms - p.end_ms, p.start_ms - cand.end_ms) < BREATHING_GAP_MS
+      );
+
+// Rule 19, flash spacing: a flash is a video or transition item whose effect has a `peak_alpha` (a white flash), or a
+// transition whose `color` is light (luma above `FLASH_LUMA`); two flashes start at least `FLASH_GAP_MS` apart.
+export const FLASH_GAP_MS = 8000;
+const FLASH_LUMA = 0.6;
+
+const lumaOf = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+};
+
+export const isFlash = (item: PlanItem) => {
+  const entry = effectById(item.effect);
+  if (!entry || (entry.layer !== 'video' && entry.layer !== 'transition')) return false;
+  if ('peak_alpha' in entry.default_params) return true;
+  const color = item.params?.color ?? entry.default_params.color;
+  return entry.layer === 'transition' && typeof color === 'string' && HEX_COLOR.test(color) && lumaOf(color) > FLASH_LUMA;
+};
+
+// Whether `cand` is a flash that starts within `FLASH_GAP_MS` of a placed flash (rule 19).
+export const flashConflict = (placed: PlanItem[], cand: PlanItem) =>
+  isFlash(cand) && placed.some((p) => isFlash(p) && Math.abs(p.start_ms - cand.start_ms) < FLASH_GAP_MS);
+
+const minutesOf = (durationMs: number) => Math.max(0, durationMs) / 60_000;
+
+// The feature and icon budget of a video of `durationMs` (output timeline): the per-minute rate, never below the
+// level's floor, so a video of up to one minute gets exactly the floor. In a calm style the icons follow the level's
+// calm rate instead (`calm_icons_per_minute`, never below that many, never above the level's own icon budget).
+export const budgetFor = (level: EditLevel, durationMs: number, style?: EditStyle) => {
+  const r = LEVEL_RULES[level];
+  const m = minutesOf(durationMs);
+  const icons = r.max_icons === 0 ? 0 : Math.max(r.max_icons, Math.round(r.icons_per_minute * m));
+  return {
+    features: Math.max(r.max_feature_effects, Math.round(r.feature_effects_per_minute * m)),
+    icons:
+      style === 'calm'
+        ? Math.min(icons, Math.max(r.calm_icons_per_minute, Math.round(r.calm_icons_per_minute * m)))
+        : icons,
+  };
+};
+
+// An entry's count limit for a video of `durationMs`: `max_per_video` is per minute of video, never below its value.
+export const capFor = (entry: RegistryEntry, durationMs: number) =>
+  Math.ceil(entry.max_per_video * Math.max(1, minutesOf(durationMs)));
+
 // Why an effect may not start at `startMs` given the starts of the same effect already placed, or null (rule 8):
-// not again within its cooldown, and at most `max_per_video` times.
+// not again within its cooldown, and at most `capFor` times for the video's duration (output timeline).
 export const cooldownConflict = (
   entry: RegistryEntry,
   sameEffectStarts: number[],
-  startMs: number
+  startMs: number,
+  durationMs: number
 ): string | null => {
-  if (sameEffectStarts.length >= entry.max_per_video) return 'max_per_video';
+  if (sameEffectStarts.length >= capFor(entry, durationMs)) return 'max_per_video';
   if (sameEffectStarts.some((s) => Math.abs(startMs - s) < entry.cooldown_ms)) {
     return 'cooldown';
   }
@@ -107,7 +180,7 @@ export const cooldownConflict = (
 };
 
 // The shortest and longest an item of this effect may last (rules 4, 12 and 13): the registry's range, narrowed
-// by the hold time of its text (500 ms + 150 ms a word, at most 2500 ms) or the hold time of its icon.
+// by the hold time of its text (500 ms + 150 ms a word, at most 2500 ms) or the hold time of its icon (500 to 2500 ms).
 export const durationBounds = (
   entry: RegistryEntry,
   component?: PlanComponent,

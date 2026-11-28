@@ -7,7 +7,7 @@
 import { EditLevel, ParamValue, TextKind, TextLook, ZoneId } from '../contract/edit.contract';
 import { effectById, effectsForLevel } from '../contract/edit.registry';
 import { ENTRY_MOTIONS, MotionGroup, motionSpec, motionUsable, textMotionsOf } from '../contract/edit.motions';
-import { TEXT_LOOKS, lookUsable, requiredFeatures, textLookById } from '../contract/edit.styles';
+import { TEXT_LOOKS, boxedLookId, lookUsable, requiredFeatures, textLookById } from '../contract/edit.styles';
 
 // What the chooser reads of the request's capabilities.
 export interface TextStyleCapabilities {
@@ -30,7 +30,8 @@ interface TextPair {
 
 // The text effect and the look it draws, in the order they are rotated for variety, per level. The looks of card S8 are
 // interleaved with the shipped pairs, so a video of a few texts shows them too; a phone that lists none of them (or lacks
-// their features) has them filtered out, which leaves the shipped pairs in their old order and is planned exactly as before.
+// their features) has them filtered out. The pairs are written with the look of their effect; `pairsFor` draws a look
+// without a background as the box look it maps to (TS13), so these four stay as released and are never planned as they are.
 // A new look rides `x_pop` or `x_slide_up`, which bind no look: the validator puts the look an effect binds back (rule 13).
 const TEXT_STYLE_PAIRS: Record<EditLevel, TextPair[]> = {
   basic: [
@@ -109,8 +110,6 @@ const EXITS: Record<TextEnergy, string[]> = {
 
 // A hold that belongs to a look, offered with the energy's own holds.
 const LOOK_HOLD: Record<string, string> = {
-  glow: 'neon_flicker',
-  gradient: 'shimmer',
   neon_box: 'neon_flicker',
   gradient_block: 'shimmer',
 };
@@ -158,7 +157,8 @@ export const textEnergy = (kind: TextKind, mood?: string): [TextEnergy, string] 
 
 // The effects and looks a text of this energy may take at a level: effects the level and the phone allow, looks the
 // phone lists and has every feature of (`looks` is the look table, the shipped one by default), no fixed effect whose entry the phone does not draw, and not one whose fixed entry belongs to the
-// opposite energy (that last rule falls back to all of them).
+// opposite energy (that last rule falls back to all of them). Every text has a background: a pair's look is the one
+// drawn in its place (`boxedLookId`), and a pair that becomes the same as an earlier one is dropped.
 const pairsFor = (
   energy: TextEnergy,
   level: EditLevel,
@@ -171,7 +171,10 @@ const pairsFor = (
   // a plan with no capabilities at all (no phone to ask) gets only the looks of the legacy format, as it gets only the
   // legacy motions: a look needing a feature waits for a phone that lists it
   const drawable = (look: TextLook | undefined) => lookUsable(look, caps) && (!!caps || !requiredFeatures(look!).length);
-  const pairs = TEXT_STYLE_PAIRS[level].filter(
+  const boxed = TEXT_STYLE_PAIRS[level]
+    .map((p) => ({ ...p, look: boxedLookId(p.look, looks) }))
+    .filter((p, at, all) => all.findIndex((q) => q.effect === p.effect && q.look === p.look) === at);
+  const pairs = boxed.filter(
     (p) =>
       allowed.has(p.effect) &&
       drawable(textLookById(p.look, looks)) &&

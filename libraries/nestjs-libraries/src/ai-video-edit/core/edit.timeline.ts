@@ -13,11 +13,16 @@ import { mergeSpans, Span, subtractSpans } from './edit.windows';
 
 // How silence is cut: a gap of `gapMs` or more between two words is cut, leaving `keepMs` of it on each side of
 // the cut; a cut shorter than `minCutMs` is not worth a jump. `durationMs` also lets the silence after the last word go.
+// With both `sentenceEnds` (the `EditWord.i` of each sentence's last word) and `minInsideMs`, a gap after a word that
+// is not a sentence end is a pause inside a sentence and is cut only from `minInsideMs` (never below `gapMs`); the
+// lead-in and the tail are not between two words and keep `gapMs`.
 export interface SilenceOptions {
   gapMs: number;
   keepMs: number;
   minCutMs: number;
   durationMs?: number;
+  sentenceEnds?: Set<number>;
+  minInsideMs?: number;
 }
 
 export const SILENCE_DEFAULTS: SilenceOptions = {
@@ -41,8 +46,10 @@ export const silenceCuts = (
   if (first >= o.gapMs) gaps.push({ start_ms: 0, end_ms: first - o.keepMs });
   // Words may overlap, so a gap runs from the latest end seen so far
   let latestEnd = words[0].end_ms;
-  for (const w of words.slice(1)) {
-    if (w.start_ms - latestEnd >= o.gapMs) {
+  for (let k = 1; k < words.length; k++) {
+    const w = words[k];
+    const inside = o.sentenceEnds && o.minInsideMs !== undefined && !o.sentenceEnds.has(words[k - 1].i);
+    if (w.start_ms - latestEnd >= (inside ? Math.max(o.gapMs, o.minInsideMs as number) : o.gapMs)) {
       gaps.push({
         start_ms: latestEnd + o.keepMs,
         end_ms: w.start_ms - o.keepMs,

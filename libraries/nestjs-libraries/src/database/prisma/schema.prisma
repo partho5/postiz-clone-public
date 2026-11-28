@@ -451,6 +451,8 @@ model AiVideoEdit {
   words          Json?
   scores         Json?
   texts          Json?
+  // the director's moments (trust-first edit): style, source and the labelled moments, times and labels only, no text
+  moments        Json?
   plan           Json?
   assets         Json?
   // the exact body `GET /public/v1/ai-edits/:id` serves once READY, built once (tracing card L4)

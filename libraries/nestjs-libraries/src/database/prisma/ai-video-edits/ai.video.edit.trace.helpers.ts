@@ -4,11 +4,13 @@
 // there is nothing to read and no error).
 import { Context } from '@temporalio/activity';
 import { WriterAnswer, WrittenTexts } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.texts';
+import { budgetFor } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.rules';
 import { hasBanned } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.validator';
 import { HOOK_SLOT_ID } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.slots';
 import type { LlmUsage } from '@gitroom/nestjs-libraries/ai-video-edit/llm.usage';
 import type { CheckResult } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.clientcheck';
 import type { PlanAndValidateResult, PlanEditInput } from '@gitroom/nestjs-libraries/ai-video-edit/core/edit.pipeline';
+import { requestForTrace } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edit.trace.bundle';
 import type { TraceEntry, TraceStep } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edit.trace.service';
 
 // What the running Temporal activity says about itself: its attempt (1 for the first try) and its workflow and run ids.
@@ -150,17 +152,18 @@ const tally = (codes: (string | number)[]) =>
 // The `structure/input` row: what `planAndValidate` was called with (the transcript words, the request, the palette, the
 // scores, the written texts, the assets, the banned words), so the plan can be made again from the trace alone (the golden
 // replay). `full` mode keeps it whole; `meta` reduces it to counts, lengths and codes like any payload. Nothing secret is in
-// it: the request is the phone's own, the rest is the edit's.
+// it: the request is the phone's own (its `chapters` reduced to counts, as everywhere), the rest is the edit's.
 export const plannerInputTrace = (input: PlanEditInput): TraceEntry => ({
   step: 'structure',
   kind: 'input',
   payload: {
     session_id: input.sessionId,
     level: input.level,
-    request: input.request,
+    request: requestForTrace(input.request),
     words: input.words,
     palette: input.palette,
     scores: input.scores,
+    direction: input.direction,
     texts: input.texts,
     assets: input.assets,
     plan_assets: input.planAssets,
@@ -190,16 +193,19 @@ export const plannerTrace = (result: PlanAndValidateResult): TraceEntry[] => {
         },
       },
     });
-    const dropped = planner.assemble.filter((d) => d.decision === 'dropped');
+    // the moment pass's lines (a director's picks) follow the slots' and are not slots: the counts below are the slots'
+    const slotLines = planner.assemble.filter((d) => !d.slot_id.startsWith('moment:'));
+    const dropped = slotLines.filter((d) => d.decision === 'dropped');
     rows.push({
       step: 'assemble',
       kind: 'output',
       payload: {
-        slots: planner.assemble.length,
-        kept: planner.assemble.length - dropped.length,
+        slots: slotLines.length,
+        kept: slotLines.length - dropped.length,
         dropped: dropped.length,
         reasons: tally(dropped.map((d) => d.reason_code)),
         plan_items: result.plan.items.length,
+        ...(planner.direction ? { direction: planner.direction } : {}),
       },
     });
     for (const decision of planner.assemble) {
@@ -244,6 +250,32 @@ export const plannerTrace = (result: PlanAndValidateResult): TraceEntry[] => {
   return rows;
 };
 
+// The decision that tells why a video got the icons it got: the icon budget of its duration, how many icon queries the writer
+// gave, how many slots were searched and found a file, how many icons the final plan holds, and how often an icon could not
+// go in, by code (the assembler's icon codes, and `no_icon_for_slot` for a search that found nothing). Ids and counts only,
+// never a query.
+export const iconsTrace = (
+  result: PlanAndValidateResult,
+  written: WrittenTexts | undefined,
+  searched: number,
+  found: number
+): TraceEntry => ({
+  step: 'plan',
+  kind: 'decision',
+  payload: {
+    decision: 'icons',
+    budget: budgetFor(result.plan.level, result.plan.video.output_duration_ms, result.planner?.direction?.style).icons,
+    written_queries: Object.keys(written?.icon_queries || {}).length,
+    searched,
+    found,
+    placed: result.plan.items.filter((i) => i.layer === 'icon').length,
+    misses: {
+      ...(result.planner?.icon_misses || {}),
+      ...(searched > found ? { no_icon_for_slot: searched - found } : {}),
+    },
+  },
+});
+
 // The trace rows of a client check, in the order they are written: the summary (how many findings, by code, and whether
 // the plan is unusable), then one decision per finding (code, item id, severity and the detail, which holds codes and
 // counts only). No text of the plan. `blocking` says whether an unusable plan ends the job (`AI_EDIT_CLIENT_CHECK_BLOCK`).
@@ -271,7 +303,7 @@ export const clientCheckTrace = (results: CheckResult[], unusable: boolean, bloc
 ];
 
 // The steps whose LLM calls the ledger names.
-export type UsageStep = 'transcribe' | 'perceive' | 'write' | 'assets';
+export type UsageStep = 'transcribe' | 'direct' | 'perceive' | 'write' | 'assets';
 
 // The payload of a `usage/metric` row.
 export interface UsagePayload {

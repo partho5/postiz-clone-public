@@ -167,4 +167,61 @@ describe('ai.video-editing: AnthropicService decision calls', () => {
     });
     expect(usage[0].input_tokens).toBeGreaterThanOrEqual(100);
   });
+
+  it('sends a system message as the system field and keeps it out of the messages', async () => {
+    mockCreate.mockResolvedValue(response(JSON.stringify(PICKS)));
+
+    await new AnthropicService().pickEditIcons('claude-haiku-5-5', 'high', [
+      { role: 'system', content: 'rule one' },
+      { role: 'user', content: 'alpha' },
+      { role: 'system', content: 'rule two' },
+    ]);
+
+    const body = mockCreate.mock.calls[0][0];
+    expect(body.system).toBe('rule one\n\nrule two');
+    expect(body.messages).toEqual([{ role: 'user', content: 'alpha' }]);
+  });
+
+  it('sends no system field when there is no system message', async () => {
+    mockCreate.mockResolvedValue(response(JSON.stringify(PICKS)));
+
+    await new AnthropicService().pickEditIcons(
+      'claude-haiku-5-5',
+      'high',
+      MESSAGES
+    );
+
+    expect(mockCreate.mock.calls[0][0]).not.toHaveProperty('system');
+  });
+
+  it('answers the director labels with the writer timeout, the system prompt apart and the usage recorded', async () => {
+    const direction = { style: 'calm', labels: [{ id: 's1', label: 'hook' }] };
+    mockCreate.mockResolvedValue(response(JSON.stringify(direction)));
+    const usage: any[] = [];
+
+    expect(
+      await new AnthropicService().directEdit('claude-haiku-5-5', 'high', [
+        { role: 'system', content: 'rule one' },
+        { role: 'user', content: 'alpha' },
+      ], usage)
+    ).toEqual(direction);
+
+    const [body, options] = mockCreate.mock.calls[0];
+    expect(body.system).toBe('rule one');
+    expect(body.messages).toEqual([{ role: 'user', content: 'alpha' }]);
+    expect(body.output_config).toMatchObject({ effort: 'high', format: { type: 'json_schema' } });
+    // directEdit runs in a 10-minute activity: two tries of 240 s
+    expect(options).toEqual({ timeout: 240 * 1000, maxRetries: 1 });
+    expect(usage[0]).toMatchObject({ ok: true, estimated: false });
+  });
+
+  it('answers null for a director answer with a label outside the list or another shape', async () => {
+    mockCreate.mockResolvedValueOnce(
+      response(JSON.stringify({ style: 'calm', labels: [{ id: 's1', label: 'drawing' }] }))
+    );
+    mockCreate.mockResolvedValueOnce(response(JSON.stringify(PICKS)));
+
+    expect(await new AnthropicService().directEdit('claude-haiku-5-5', 'high', MESSAGES)).toBeNull();
+    expect(await new AnthropicService().directEdit('claude-haiku-5-5', 'high', MESSAGES)).toBeNull();
+  });
 });

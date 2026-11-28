@@ -16,7 +16,8 @@ import {
 } from '@gitroom/nestjs-libraries/ai-video-edit/core/fixtures/edit.golden.fixtures';
 import { AiCaptionsNotConfigured } from '@gitroom/nestjs-libraries/muse/transcription.provider';
 import { organizationId as organizationKey } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
-import { writerEditLlm } from '@gitroom/nestjs-libraries/ai-video-edit/edit.llm';
+import { directorEditLlm, writerEditLlm } from '@gitroom/nestjs-libraries/ai-video-edit/edit.llm';
+import { EDIT_DIRECTOR_PROMPT } from '@gitroom/nestjs-libraries/ai-video-edit/edit.director.prompt';
 
 const mockDeleteObject = jest.fn();
 const mockReadObject = jest.fn();
@@ -121,6 +122,7 @@ class FakeRepository {
       words: null,
       scores: null,
       texts: null,
+      moments: null,
       plan: null,
       assets: null,
       log: null,
@@ -213,8 +215,11 @@ const build = (
     isConfigured: jest.fn().mockReturnValue(false),
     ask: jest.fn().mockResolvedValue({}),
   };
-  // The writer: down unless a test makes it answer; the brand: a workspace with a colour and no profile
-  const editLlm = { writeEditTexts: jest.fn().mockResolvedValue(null), isConfigured: jest.fn().mockReturnValue(true) };
+  // The writer and the director: down unless a test makes them answer; the brand: a workspace with a colour and no profile
+  const editLlm = {
+    writeEditTexts: jest.fn().mockResolvedValue(null),
+    directEdit: jest.fn().mockResolvedValue(null),
+    isConfigured: jest.fn().mockReturnValue(true) };
   const brands = {
     get: jest.fn().mockResolvedValue({
       color: '#1E88E5',
@@ -350,7 +355,7 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       expect(h.transcription.audioSeconds).toHaveBeenCalledWith(AUDIO_KEY);
       expect(h.start).toHaveBeenCalledTimes(1);
       const [name, options] = h.start.mock.calls[0];
-      expect(name).toBe('aiVideoEditWorkflow');
+      expect(name).toBe('aiVideoEditWorkflowV101');
       expect(options).toMatchObject({
         workflowId: 'ai_video_edit_edit-1',
         taskQueue: 'main',
@@ -764,7 +769,7 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       await heavy(h);
       h.editLlm.writeEditTexts.mockImplementation(
         async (_option: unknown, messages: { content: string }[]) => {
-          const ids = [...messages[0].content.matchAll(/^(h1|s\d+)[ :]/gm)].map((m) => m[1]);
+          const ids = [...messages[1].content.matchAll(/^(h1|s\d+)[ :]/gm)].map((m) => m[1]);
           return {
             slots: ids.map((id) => ({
               id,
@@ -783,10 +788,10 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       expect(edit.texts.icon_queries.h1).toBe('clock');
       expect(texts(edit.plan)).toContain('Stop wasting hours');
       const [option, messages] = h.editLlm.writeEditTexts.mock.calls[0];
-      // the option the environment chain gives (the default is claude-haiku-5-5 at high effort, see edit.llm.spec)
+      // the option the environment chain gives (the default is Muse Spark at high effort, see edit.llm.spec)
       expect(option).toEqual(writerEditLlm());
-      expect(messages[0].content).toContain('Bold and warm');
-      expect(messages[0].content).toContain('cheap');
+      expect(messages[1].content).toContain('Bold and warm');
+      expect(messages[1].content).toContain('cheap');
     });
 
     it('hands the resolver the written texts per slot, the hook text on the hook slot', async () => {
@@ -794,7 +799,7 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       await heavy(h);
       h.editLlm.writeEditTexts.mockImplementation(
         async (_option: unknown, messages: { content: string }[]) => ({
-          slots: [...messages[0].content.matchAll(/^(h1|s\d+)[ :]/gm)].map((m) => ({
+          slots: [...messages[1].content.matchAll(/^(h1|s\d+)[ :]/gm)].map((m) => ({
             id: m[1],
             text: m[1] === 'h1' ? 'Stop wasting hours' : 'Save 2 hours',
             icon_query: 'clock',
@@ -894,6 +899,287 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       await runJob(down, 'edit-1');
       expect(down.repo.edits[0].status).toBe('READY');
       expect(down.repo.edits[0].plan.palette.mode).toBe('multi');
+    });
+  });
+
+  describe('the director (trust-first edit, TS4)', () => {
+    // The tutorial without drawings or slides: its moments are the sentences only.
+    const QUIET = { ...REQUEST, activity_map: [] };
+
+    // A Standard job with its words kept, ready for the director.
+    const standard = async (h: Harness, request: unknown = QUIET) => {
+      await create(h, { level: 'standard', proxyUploadIds: [PROXY], request });
+      await h.service.transcribeEdit('edit-1');
+    };
+
+    // The trace rows of a step (the decisions of the director are `direct/decision`).
+    const rows = (h: Harness, step: string, kind?: string) =>
+      h.trace.record.mock.calls
+        .map(([, entry]: [string, any]) => entry)
+        .filter((r: any) => r.step === step && (!kind || r.kind === kind));
+
+    const skippedWith = (h: Harness) =>
+      rows(h, 'direct', 'decision').find((r: any) => r.payload.decision === 'skipped')?.payload.reason_code;
+
+    // The ids of the sentences the director is asked about, read from its message.
+    const asked = (h: Harness) =>
+      [...h.editLlm.directEdit.mock.calls[0][1][1].content.matchAll(/^(s\d+) \[/gm)].map((m: RegExpMatchArray) => m[1]);
+
+    // The director labels the first sentence a hook and the rest plain, and calls the video lively.
+    const answers = (h: Harness, style = 'lively') =>
+      h.editLlm.directEdit.mockImplementation(async (_option: unknown, messages: { content: string }[]) => ({
+        style,
+        labels: [...messages[1].content.matchAll(/^(s\d+) \[/gm)].map((m) => ({
+          id: m[1],
+          label: m[1] === 's1' ? 'hook' : 'plain',
+        })),
+      }));
+
+    it('skips with a traced reason, in order: level, not configured, no words', async () => {
+      const basic = build();
+      await create(basic);
+      await basic.service.transcribeEdit('edit-1');
+      basic.editLlm.isConfigured.mockReturnValue(false);
+      basic.repo.edits[0].words = [];
+      await basic.service.directEdit('edit-1');
+      expect(skippedWith(basic)).toBe('level_without_director');
+
+      const unconfigured = build();
+      await standard(unconfigured);
+      unconfigured.editLlm.isConfigured.mockReturnValue(false);
+      unconfigured.repo.edits[0].words = [];
+      await unconfigured.service.directEdit('edit-1');
+      expect(skippedWith(unconfigured)).toBe('director_not_configured');
+
+      const empty = build();
+      await standard(empty);
+      empty.repo.edits[0].words = [];
+      await empty.service.directEdit('edit-1');
+      expect(skippedWith(empty)).toBe('no_words');
+
+      for (const h of [basic, unconfigured, empty]) {
+        expect(h.editLlm.directEdit).not.toHaveBeenCalled();
+        expect(h.repo.edits[0].moments).toBeNull();
+      }
+      expect(rows(basic, 'direct', 'decision')[0].payload).toEqual({
+        decision: 'skipped',
+        reason_code: 'level_without_director',
+        level: 'basic',
+      });
+    });
+
+    it('labels the sentences of the source words and keeps the style and the moments', async () => {
+      const h = build();
+      await standard(h);
+      answers(h);
+
+      await h.service.directEdit('edit-1');
+
+      const moments = h.repo.edits[0].moments;
+      expect(moments.source).toBe('director');
+      expect(moments.style).toBe('lively');
+      expect(moments.moments.length).toBeGreaterThan(1);
+      expect(asked(h)).toEqual(moments.moments.filter((m: any) => m.kind === 'sentence').map((m: any) => m.id));
+      expect(moments.moments[0]).toMatchObject({ id: 's1', kind: 'sentence', label: 'hook', word_from: 0 });
+      expect(moments.moments[1]).toMatchObject({ id: 's2', label: 'plain' });
+      // sentences cover the kept words, on the source timeline
+      const sentences = moments.moments.filter((m: any) => m.kind === 'sentence');
+      expect(sentences[0].start_ms).toBe(h.repo.edits[0].words[0].start_ms);
+      expect(sentences[sentences.length - 1].word_to).toBe(h.repo.edits[0].words.length - 1);
+      const [option, messages] = h.editLlm.directEdit.mock.calls[0];
+      expect(option).toEqual(directorEditLlm());
+      expect(messages[0].role).toBe('system');
+      expect(messages[0].content).toBe(EDIT_DIRECTOR_PROMPT);
+      expect(messages[1].role).toBe('user');
+    });
+
+    it('builds drawings and chapters on the source timeline, whatever the cuts will be', async () => {
+      const h = build();
+      const request = {
+        ...QUIET,
+        activity_map: [
+          { id: 'a1', type: 'brush', start_ms: 1000, end_ms: 2000, region: { x: 0.1, y: 0.2, w: 0.2, h: 0.1 }, strength: 1, source: 'event_log' },
+        ],
+        chapters: [{ start_ms: 3000, kind: 'text', title: 'Synthetic topic', note: 'Synthetic note' }],
+      };
+      await standard(h, request);
+      answers(h, 'calm');
+
+      await h.service.directEdit('edit-1');
+
+      const moments = h.repo.edits[0].moments.moments;
+      expect(moments.find((m: any) => m.kind === 'drawing')).toMatchObject({
+        id: 'd1',
+        start_ms: 1000,
+        end_ms: 2000,
+        label: 'drawing',
+        region: { x: 0.1, y: 0.2, w: 0.2, h: 0.1 },
+      });
+      expect(moments.find((m: any) => m.kind === 'chapter')).toMatchObject({
+        id: 'c1',
+        start_ms: 2999,
+        end_ms: 3000,
+        label: 'chapter',
+      });
+      // the director reads the topic and the drawing as the request has them
+      const data = h.editLlm.directEdit.mock.calls[0][1][1].content;
+      expect(data).toContain('Topic 1 at 3.0s: "Synthetic topic" (speaker note: Synthetic note)');
+      expect(data).toContain('d1 1.0–2.0s');
+    });
+
+    it('keeps no text, title or note in the stored moments or in the trace', async () => {
+      const h = build();
+      await standard(h, {
+        ...QUIET,
+        chapters: [{ start_ms: 3000, kind: 'text', title: 'Synthetic topic', note: 'Synthetic note' }],
+      });
+      answers(h);
+
+      await h.service.directEdit('edit-1');
+
+      const allowed = ['id', 'kind', 'start_ms', 'end_ms', 'word_from', 'word_to', 'region', 'label'];
+      const stored = h.repo.edits[0].moments;
+      expect(Object.keys(stored).sort()).toEqual(['moments', 'source', 'style']);
+      for (const m of stored.moments) {
+        expect(Object.keys(m).every((key) => allowed.includes(key))).toBe(true);
+      }
+      const spoken = FIXTURE.words.map((w) => w.text.replace(/[^\p{L}\p{N}]/gu, '')).filter((w) => w.length > 5);
+      const traced = JSON.stringify(rows(h, 'direct'));
+      for (const text of [JSON.stringify(stored), traced]) {
+        expect(text).not.toMatch(/"(text|title|note)":/);
+        expect(text).not.toContain('Synthetic');
+        for (const word of spoken) {
+          expect(text).not.toContain(word);
+        }
+      }
+    });
+
+    it('traces the decision with the style, the source and the count of each label', async () => {
+      const h = build();
+      await standard(h);
+      answers(h);
+
+      await h.service.directEdit('edit-1');
+
+      const stored = h.repo.edits[0].moments.moments;
+      const decision = rows(h, 'direct', 'decision').find((r: any) => r.payload.decision === 'direct');
+      expect(decision.payload).toEqual({
+        decision: 'direct',
+        style: 'lively',
+        source: 'director',
+        counts: { hook: 1, plain: stored.length - 1 },
+      });
+      expect(rows(h, 'direct', 'input')[0].payload).toMatchObject({ language: 'eng', drawings: 0, chapters: 0 });
+    });
+
+    it('stores { source: "none" } when the director fails or refuses, and the edit still gets its plan', async () => {
+      const down = build();
+      await standard(down);
+      down.editLlm.directEdit.mockRejectedValue(new Error('provider down'));
+      await down.service.directEdit('edit-1');
+      expect(down.repo.edits[0].moments).toEqual({ source: 'none' });
+      expect(rows(down, 'direct', 'decision').find((r: any) => r.payload.decision === 'direct').payload).toMatchObject({
+        style: null,
+        source: 'none',
+        counts: {},
+        reason_code: 'director_failed',
+      });
+      await down.service.perceiveEdit('edit-1');
+      await down.service.writeEdit('edit-1');
+      await down.service.planEdit('edit-1');
+      await down.service.finishEdit('edit-1');
+      expect(down.repo.edits[0].status).toBe('READY');
+      expect(down.repo.edits[0].plan).toBeTruthy();
+
+      const refused = build();
+      await standard(refused);
+      refused.editLlm.directEdit.mockResolvedValue(null);
+      await refused.service.directEdit('edit-1');
+      expect(refused.repo.edits[0].moments).toEqual({ source: 'none' });
+      expect(
+        rows(refused, 'direct', 'decision').find((r: any) => r.payload.decision === 'direct').payload.reason_code
+      ).toBe('no_usable_answer');
+    });
+
+    it('logs and traces the failure by its class only, never its message', async () => {
+      const h = build();
+      await standard(h);
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      h.editLlm.directEdit.mockRejectedValue(new Error('prompt with Synthetic words'));
+
+      await h.service.directEdit('edit-1');
+
+      expect(warn.mock.calls.map(([text]) => String(text)).join('\n')).not.toContain('Synthetic');
+      expect(JSON.stringify(rows(h, 'direct', 'error'))).not.toContain('Synthetic');
+      expect(rows(h, 'direct', 'error')).toHaveLength(1);
+      warn.mockRestore();
+    });
+
+    it('adds the director call to the usage ledger and the usage rows', async () => {
+      const h = build();
+      await standard(h);
+      h.editLlm.directEdit.mockImplementation(async (_option: unknown, _messages: unknown[], usage?: any[]) => {
+        usage?.push({
+          model: 'muse-spark-1.3-contributor',
+          input_tokens: 900,
+          output_tokens: 80,
+          estimated: false,
+          latency_ms: 150,
+          ok: true,
+        });
+        return { style: 'calm', labels: [{ id: 's1', label: 'hook' }] };
+      });
+
+      await h.service.directEdit('edit-1');
+
+      const sentences = h.repo.edits[0].moments.moments.filter((m: any) => m.kind === 'sentence').length;
+      const row = rows(h, 'usage', 'metric').find((r: any) => r.payload.step === 'direct');
+      expect(row.payload).toMatchObject({
+        step: 'direct',
+        work: `director labels for ${sentences} sentences`,
+        model: 'muse-spark-1.3-contributor',
+        input_tokens: 900,
+        output_tokens: 80,
+        total_tokens: 980,
+      });
+      expect(h.repo.edits[0].log.usage).toMatchObject({
+        calls: 1,
+        total_input_tokens: 900,
+        by_step: { direct: { calls: 1, input_tokens: 900, output_tokens: 80 } },
+      });
+    });
+
+    it('still joins the usage of a call that failed', async () => {
+      const h = build();
+      await standard(h);
+      h.editLlm.directEdit.mockImplementation(async (_option: unknown, _messages: unknown[], usage?: any[]) => {
+        usage?.push({ model: 'muse-spark-1.3-contributor', input_tokens: 0, output_tokens: 0, estimated: true, latency_ms: 90, ok: false });
+        throw new Error('refused');
+      });
+
+      await h.service.directEdit('edit-1');
+
+      expect(h.repo.edits[0].moments).toEqual({ source: 'none' });
+      expect(h.repo.edits[0].log.usage.by_step.direct.calls).toBe(1);
+    });
+
+    it('asks the director once: a repeat of the step, or a job already ended, changes nothing', async () => {
+      const h = build();
+      await standard(h);
+      answers(h);
+
+      await h.service.directEdit('edit-1');
+      await h.service.directEdit('edit-1');
+
+      expect(h.editLlm.directEdit).toHaveBeenCalledTimes(1);
+      expect(skippedWith(h)).toBe('moments_already_kept');
+
+      const ended = build();
+      await standard(ended);
+      ended.repo.edits[0].status = 'FAILED';
+      await ended.service.directEdit('edit-1');
+      expect(ended.editLlm.directEdit).not.toHaveBeenCalled();
+      expect(ended.repo.edits[0].moments).toBeNull();
     });
   });
 
@@ -1027,6 +1313,25 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       await failed.service.failEdit('edit-1', 'A text of ours');
       expect(failed.repo.edits[0]).toMatchObject({ status: 'FAILED', error: 'A text of ours' });
       expect(failed.charging.finish).toHaveBeenCalledWith('ai:edit:edit-1', { ok: false }, ORG);
+    });
+
+    it('stores the chapters as sent and traces them as counts only', async () => {
+      const h = build();
+      const chapters = [
+        { start_ms: 0, kind: 'text', title: 'Synthetic title', note: 'Synthetic note' },
+        { start_ms: 4000, kind: 'image' },
+      ];
+
+      await h.service.create(
+        ORG,
+        USER,
+        { sessionId: SESSION, level: 'basic', audioUploadId: AUDIO, request: { ...REQUEST, chapters } } as any
+      );
+
+      expect(h.repo.edits[0].request.chapters).toEqual(chapters);
+      const input = rows(h, 'create', 'input')[0];
+      expect(input.payload.request.chapters).toEqual({ count: 2, with_title: 1, with_note: 1 });
+      expect(JSON.stringify(rows(h))).not.toContain('Synthetic');
     });
 
     it('writes the create rows with the edit, session, request and hold ids', async () => {
@@ -1206,6 +1511,84 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       expect(decision(off, 'perceive', 'skipped')?.payload.reason_code).toBe('clef_not_configured');
     });
 
+    // the director's moments of the fixture's first seconds, on the source timeline (a claim and a chapter)
+    const directed = (h: Harness, style = 'calm') => {
+      h.repo.edits[0].moments = {
+        style,
+        source: 'director',
+        moments: [
+          { id: 's1', kind: 'sentence', start_ms: 1000, end_ms: 3000, word_from: 0, word_to: 5, label: 'claim' },
+          { id: 'c1', kind: 'chapter', start_ms: 5000, end_ms: 5001, label: 'chapter' },
+        ],
+      };
+    };
+
+    it('asks the picks of the director moments in the piece and keeps a valid answer', async () => {
+      const h = build();
+      h.clef.isConfigured.mockReturnValue(true);
+      await create(h, { level: 'standard', proxyUploadIds: [PROXY] });
+      await h.service.transcribeEdit('edit-1');
+      directed(h);
+      h.clef.ask.mockImplementation(async (_video: Buffer, questions: { id: string }[]) =>
+        Object.fromEntries(
+          questions.map((q) => [q.id, q.id === 'pick_s1' ? 'f_hero' : q.id === 'pick_c1' ? 'tr_made_up' : 'calm'])
+        )
+      );
+
+      await h.service.perceiveEdit('edit-1');
+
+      const asked: { id: string }[] = h.clef.ask.mock.calls.flatMap((c: any[]) => c[1]);
+      expect(asked.map((q) => q.id)).toEqual(expect.arrayContaining(['pick_s1', 'pick_c1']));
+      const picks = h.repo.edits[0].scores.picks;
+      expect(picks.s1).toBe('f_hero');
+      // a foreign answer is ignored, so the chapter gets its rotation fallback, a registry id
+      expect(picks.c1).toMatch(/^(f_roll|tr_push|tr_dip_color)$/);
+      expect(decision(h, 'perceive', 'pick_fallback')?.payload).toMatchObject({ reason_code: 'pick_not_answered', filled: 1 });
+      expect(rows(h, 'perceive', 'input').find((r: any) => r.payload.piece === 0).payload.picks).toBe(2);
+    });
+
+    it('asks no picks without a director direction', async () => {
+      const h = build();
+      h.clef.isConfigured.mockReturnValue(true);
+      await create(h, { level: 'standard', proxyUploadIds: [PROXY] });
+      await h.service.transcribeEdit('edit-1');
+      h.repo.edits[0].moments = { source: 'none' };
+      h.clef.ask.mockResolvedValue({ mood: 'calm' });
+
+      await h.service.perceiveEdit('edit-1');
+
+      const asked: { id: string }[] = h.clef.ask.mock.calls.flatMap((c: any[]) => c[1]);
+      expect(asked.some((q) => q.id.startsWith('pick_'))).toBe(false);
+      expect(h.repo.edits[0].scores.picks).toBeUndefined();
+      expect(decision(h, 'perceive', 'pick_fallback')).toBeUndefined();
+    });
+
+    it('fills the picks from the rotation when Clef-omni is not configured or every call fails', async () => {
+      const off = build();
+      await create(off, { level: 'standard', proxyUploadIds: [PROXY] });
+      await off.service.transcribeEdit('edit-1');
+      directed(off);
+
+      await off.service.perceiveEdit('edit-1');
+
+      expect(off.clef.ask).not.toHaveBeenCalled();
+      expect(Object.keys(off.repo.edits[0].scores.picks).sort()).toEqual(['c1', 's1']);
+      expect(decision(off, 'perceive', 'pick_fallback')?.payload).toMatchObject({ reason_code: 'clef_not_configured', filled: 2 });
+
+      const down = build();
+      down.clef.isConfigured.mockReturnValue(true);
+      await create(down, { level: 'standard', proxyUploadIds: [PROXY] });
+      await down.service.transcribeEdit('edit-1');
+      directed(down);
+      down.clef.ask.mockRejectedValue(new Error('timeout'));
+
+      await down.service.perceiveEdit('edit-1');
+
+      expect(Object.keys(down.repo.edits[0].scores.picks).sort()).toEqual(['c1', 's1']);
+      expect(decision(down, 'perceive', 'fallback_no_scores')?.payload.reason_code).toBe('no_piece_answered');
+      expect(decision(down, 'perceive', 'pick_fallback')?.payload).toMatchObject({ reason_code: 'pick_not_answered' });
+    });
+
     it('records the writer call, its raw answer and each text accepted or rejected with the reason', async () => {
       const h = build();
       h.brands.get.mockResolvedValue({ color: '#1E88E5', profile: { schemaVersion: 1, bannedWords: ['Cheap'] } });
@@ -1255,6 +1638,11 @@ describe('ai.video-editing: AiVideoEditsService', () => {
       expect(rows(h, 'assets', 'output')[0].ok).toBe(true);
       expect(decision(h, 'assets', 'asset_chosen')?.payload).toMatchObject({ slot_id: 's1', outcome_code: 'cache_hit', provider_id: 'p-1' });
       expect(decision(h, 'assets', 'asset_dropped')?.payload).toMatchObject({ slot_id: 's2', outcome_code: 'no_candidates', effect_code: 'no_icon_for_slot' });
+      // TS11: one decision on the plan step says why the video got the icons it got, in counts and codes
+      const icons = decision(h, 'plan', 'icons')?.payload;
+      expect(icons).toMatchObject({ written_queries: 0, found: 0, placed: 0 });
+      expect(icons.misses.no_icon_for_slot ?? 0).toBe(icons.searched);
+      expect(JSON.stringify(icons)).not.toContain('clock');
     });
 
     it('records a resolver that fails, with its effect on the plan', async () => {

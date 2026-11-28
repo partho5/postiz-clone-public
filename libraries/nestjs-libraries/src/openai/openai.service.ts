@@ -5,6 +5,8 @@ import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import type { ZodType } from 'zod/v4';
 import {
+  EditDirection,
+  EditDirectionSchema,
   EditIconPicks,
   EditLlmClient,
   EditLlmEffort,
@@ -183,6 +185,16 @@ Clips must not overlap. Write the title and the post in this language, whatever 
     usage?: LlmUsage[]
   ): Promise<EditIconPicks | null> {
     return this.completeEdit(model, effort, messages, IconPicksSchema, 'iconPicksPrompt', usage);
+  }
+
+  // The director's labels of an AI edit (ai.video-editing: the style of the video and a label per sentence).
+  directEdit(
+    model: string,
+    effort: EditLlmEffort,
+    messages: EditLlmMessage[],
+    usage?: LlmUsage[]
+  ): Promise<EditDirection | null> {
+    return this.completeEdit(model, effort, messages, EditDirectionSchema, 'editDirectionPrompt', usage);
   }
 
   async generateImage(prompt: string, isVertical = false) {

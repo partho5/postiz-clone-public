@@ -1,6 +1,6 @@
 # Rules for every sub agent of the instant video plan
 
-Read these first, then your card in `to-build/instant-video-plan.md`: its goal, owner decisions, "What exists today",
+Read these first, then your card in `_planning/instant-video-plan.md`: its goal, owner decisions, "What exists today",
 "Engine shape", the shared contract and your card. Do only your card. If something outside it blocks you, say so in your
 report and don't do it.
 

@@ -3,6 +3,7 @@
 import {
   BundleRowInput,
   bundleOf,
+  requestForTrace,
   timelineOf,
 } from '@gitroom/nestjs-libraries/database/prisma/ai-video-edits/ai.video.edit.trace.bundle';
 
@@ -62,6 +63,44 @@ describe('ai.video-editing: trace bundle (pure)', () => {
     expect(summary).toMatchObject({ status: 'READY', plan_items: 2, assets_count: 0 });
     expect(summary.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(bundleOf({ ...EDIT, delivered: null }, ROWS, { full: false }).delivered).toBeNull();
+  });
+});
+
+describe('ai.video-editing: request for a trace (chapters)', () => {
+  const chapters = [
+    { start_ms: 0, kind: 'text', title: 'Synthetic title', note: 'Synthetic note' },
+    { start_ms: 5000, kind: 'image', title: 'Another title' },
+    { start_ms: 9000, kind: 'other', region: { x: 0, y: 0, w: 1, h: 1 } },
+  ];
+
+  it('replaces the chapters by their counts and keeps every other field', () => {
+    const out = requestForTrace({ video: { duration_ms: 61000 }, language: 'eng', chapters }) as any;
+    expect(out).toEqual({ video: { duration_ms: 61000 }, language: 'eng', chapters: { count: 3, with_title: 2, with_note: 1 } });
+    expect(JSON.stringify(out)).not.toContain('Synthetic');
+    expect(JSON.stringify(out)).not.toContain('Another');
+  });
+
+  it('does not change the request it is given', () => {
+    const request = { video: {}, chapters };
+    requestForTrace(request);
+    expect(request.chapters).toBe(chapters);
+  });
+
+  it('returns a request without chapters, and a null, as they are', () => {
+    const request = { video: { duration_ms: 1 } };
+    expect(requestForTrace(request)).toBe(request);
+    expect(requestForTrace(null)).toBeNull();
+    expect(requestForTrace(undefined)).toBeUndefined();
+  });
+
+  it('counts an empty list as none', () => {
+    expect((requestForTrace({ chapters: [] }) as any).chapters).toEqual({ count: 0, with_title: 0, with_note: 0 });
+  });
+
+  it('holds no title or note in the bundle of an edit that stored chapters', () => {
+    const bundle = bundleOf({ ...EDIT, request: { video: {}, chapters } }, ROWS, { full: true });
+    expect((bundle.request as any).chapters).toEqual({ count: 3, with_title: 2, with_note: 1 });
+    expect(JSON.stringify(bundle.request)).not.toContain('Synthetic');
   });
 });
 

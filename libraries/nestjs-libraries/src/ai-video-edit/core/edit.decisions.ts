@@ -3,17 +3,18 @@
 // with their length and threshold, free windows, candidate slots, the fate of every slot in the assembler, the change
 // every validator repair made); the service writes them to the trace. Codes, ids, times and counts only, never a text
 // of the plan or a word of the transcript. No Nest or Prisma import.
-import { ActivityEntry, PROTECTION, PlanCut, Protection } from '../contract/edit.contract';
+import { ActivityEntry, EditStyle, PROTECTION, PlanCut, Protection } from '../contract/edit.contract';
 import { Slot, SlotReason } from './edit.slots';
 import { SILENCE_DEFAULTS } from './edit.timeline';
 import { Span } from './edit.windows';
 
 // Why the assembler did not plan an effect on a slot. `level_limit`: the level allows no more (or no such) effects;
 // `overlap`: no free time (window too short, another overlay or too many effects at once, a cooldown);
-// `budget`: a count is used up (the same effect's per-video count, icons, the spacing the level's budget spreads
+// `budget`: a count is used up (the same effect's per-minute count, icons, the spacing the level's budget spreads
 // effects by); `low_score`: perception said the slot gets nothing; `no_zone`: no zone of the frame fits every
 // output; `facecam_collision`: a zone would fit but for the facecam circle; `text_too_long`: the text is too wide
-// for any zone; `no_asset`: an icon, a clip or a facecam track the effect needs is missing.
+// for any zone; `content_collision`: a zone would fit but for the content (the user's ink, the slide's title) it would
+// cover; `no_asset`: an icon, a clip or a facecam track the effect needs is missing.
 export type SlotDropCode =
   | 'level_limit'
   | 'overlap'
@@ -22,15 +23,18 @@ export type SlotDropCode =
   | 'no_zone'
   | 'facecam_collision'
   | 'text_too_long'
+  | 'content_collision'
   | 'no_asset';
 
 // What the assembler decided about one candidate slot. A kept slot has `hook` (the hook text went on it) or `placed`
 // as its code; `inputs` holds what decided it (score, reasons, window, the families tried and how each ended, the
-// effect and item that were placed).
+// effect and item that were placed). The moment pass (director's picks) adds one line per pick it tried, after the
+// slots': `slot_id` is `moment:<pick key>` (`moment:s3`, `moment:d1:face`), kept with code `moment` (inputs: moment_id,
+// label, role, pick, start/end and the item), or dropped with the code of what stopped it.
 export interface SlotDecision {
   slot_id: string;
   decision: 'kept' | 'dropped';
-  reason_code: SlotDropCode | 'hook' | 'placed';
+  reason_code: SlotDropCode | 'hook' | 'placed' | 'moment';
   inputs: Record<string, unknown>;
 }
 
@@ -89,10 +93,33 @@ export interface ValidationDecision {
   changed: ValidationChange;
 }
 
+// What a director's direction changed in the assembler: the style, the level's feature budget for the video and the one
+// the style allows, how many features were placed against it, and what became of the cut transitions (`level_list`: no
+// direction, the level's own rotation; `style_calm`: a calm video has none; `no_pick` / `pick_none` / `pick_unusable`: no
+// usable `cut` pick; `picked`: the picked id only) with how many were placed. `moments`: what the moment pass did with the
+// picks (`placed` items including transitions, `dropped` picks that found no room, budget or a free window, `unusable`
+// picks that were no effect for their moment). Ids, codes and counts only.
+export interface DirectionDecision {
+  style: EditStyle;
+  level_budget: number;
+  style_budget: number;
+  feature_effects: number;
+  cut_transitions: {
+    code: 'level_list' | 'style_calm' | 'no_pick' | 'pick_none' | 'pick_unusable' | 'picked';
+    pick?: string;
+    placed: number;
+  };
+  moments: { placed: number; dropped: number; unusable: number };
+}
+
 // The decisions of the whole pipeline besides the validator's.
 export interface PlanDecisions {
   structure: StructureDecisions;
   assemble: SlotDecision[];
+  // What the director's direction changed (only with a direction).
+  direction?: DirectionDecision;
+  // How often an icon try failed, by code (the assembler's `icon_misses`).
+  icon_misses?: Record<string, number>;
 }
 
 // The protected spans, each with the busy entries (brush, motion) of the activity map that made it. An entry belongs to

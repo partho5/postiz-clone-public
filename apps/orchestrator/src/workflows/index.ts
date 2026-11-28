@@ -24,6 +24,7 @@ export * from './process.media.workflow';
 export * from './clipping.workflow';
 export * from './ai.captions.workflow';
 export * from './ai.video.edit.workflow';
+export * from './ai.video.edit.workflow.v1.0.1';
 export * from './ai.edit.asset.purge.workflow';
 export * from './ai.edit.trace.purge.workflow';
 export * from './free.grant.workflow';

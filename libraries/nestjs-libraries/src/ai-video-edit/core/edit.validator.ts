@@ -1,5 +1,5 @@
 // AI video editing (ai.video-editing), planner core: the validator (spec section 17). Checks every plan item against
-// the 16 rules and repairs it in this order: shift inside the same free window, shorten, swap to a cheaper effect of
+// the 19 rules and repairs it in this order: shift inside the same free window, shorten, swap to a cheaper effect of
 // the same kind, drop. Answers `{ plan, warnings, rejections }`: the plan sorted by start with unique ids, the soft
 // findings (hook, pacing, structure) and a log of every repair and drop for tuning. The log holds rule numbers and
 // codes only, never a text of the plan. Pure functions, no Nest or Prisma import.
@@ -29,21 +29,30 @@ import {
   textMotionsOf,
 } from '../contract/edit.motions';
 import { isSoundId } from '../contract/edit.sounds';
-import { TEXT_LOOKS, lookUsable, textLookById } from '../contract/edit.styles';
-import { GeometryContext, placeOverlay, wordCount } from './edit.geometry';
+import { TEXT_LOOKS, hasBackground, lookUsable, textLookById } from '../contract/edit.styles';
+import { ContentKeepOut, GeometryContext, placeOverlay, wordCount } from './edit.geometry';
 import {
+  BREATHING_GAP_MS,
+  BREATHING_LAYERS,
+  FLASH_GAP_MS,
+  HEX_COLOR,
   HOOK_MS,
+  budgetFor,
   capText,
   concurrencyConflict,
   cooldownConflict,
+  crowding,
   cutPoints,
   durationBounds,
   isFeature,
+  isFlash,
   overlaps,
   pacingGaps,
   visiblePoints,
 } from './edit.rules';
 import { cleanWord } from './edit.slots';
+import { isFaceMove, momentOnly, movesFace } from './edit.assembler';
+import { SENTENCE_END, SENTENCE_LABELS } from './edit.moments';
 import { buildMap } from './edit.timeline';
 import { Span } from './edit.windows';
 import { ValidationChange, ValidationDecision } from './edit.decisions';
@@ -69,6 +78,12 @@ export interface ValidationContext {
   banned_words?: string[];
   // The look table the checks read; the shipped `TEXT_LOOKS` unless a spec brings its own.
   looks?: TextLook[];
+  // The ids of the facecam item and the video item of one drawing moment (the assembler places both for the same moment);
+  // rule 18 lets such a pair share time. Absent: no pair is exempt.
+  drawing_pairs?: [string, string][];
+  // The content a text or an icon keeps off (ink, the slide title) on the OUTPUT timeline, the same list the assembler
+  // placed with: rule 6 never moves an item onto it. Absent: nothing to keep off.
+  keepouts?: ContentKeepOut[];
 }
 
 export interface ValidationResult {
@@ -119,6 +134,15 @@ const CAPTION_EFFECTS = ['c_word_highlight', 'c_active_pop', 'c_karaoke', 'c_emp
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+// Rule 5: the colour a face move fills with (what shows where the face has left), and the one a bad value falls back to.
+const FILL_COLOR_DEFAULT = '#000000';
+
+// Rule 17: a face move for a sentence starts within `FACE_NEAR_MS` of a pause (a word gap of `FACE_PAUSE_MS` or more, or the
+// start of a sentence); a move that does not is shifted to the nearest pause, at most `FACE_SHIFT_MAX_MS` away, else dropped.
+const FACE_PAUSE_MS = 200;
+const FACE_NEAR_MS = 600;
+const FACE_SHIFT_MAX_MS = 1500;
+
 // A copy of an item that can be changed without touching the plan it came from.
 const cloneItem = (item: PlanItem): PlanItem => ({
   ...item,
@@ -151,11 +175,13 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
   const caps = ctx.request.capabilities;
   const looks = ctx.looks ?? TEXT_LOOKS;
   const rules = LEVEL_RULES[plan.level];
+  const budget = budgetFor(plan.level, plan.video.output_duration_ms);
   const levelIdx = EDIT_LEVELS.indexOf(plan.level);
   const geo: GeometryContext = {
     video: ctx.request.video,
     outputs: ctx.request.outputs,
     facecam: plan.facecam_track,
+    keepouts: ctx.keepouts,
   };
   const canRender = (id: string) => !caps || caps.effects.includes(id);
   const soundsOn = rules.sounds && ctx.request.options?.sound_effects !== false;
@@ -205,6 +231,18 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
     return [...ctx.windows].sort((a, b) => dist(a) - dist(b))[0];
   };
 
+  // Rule 17: where a face move for a sentence may start: the stretch of each word gap of `FACE_PAUSE_MS` or more (the pause
+  // itself), and the start of each sentence (the first word, a word after sentence-final punctuation).
+  const pauses: Span[] = [];
+  ctx.words.forEach((w, k) => {
+    const prev = ctx.words[k - 1];
+    if (!prev || SENTENCE_END.test(prev.w.trim()) || w.start_ms - prev.end_ms >= FACE_PAUSE_MS) {
+      const gap = prev && w.start_ms - prev.end_ms >= FACE_PAUSE_MS;
+      pauses.push({ start_ms: gap ? prev.end_ms : w.start_ms, end_ms: w.start_ms });
+    }
+  });
+  const pauseDistance = (p: Span, t: number) => (t < p.start_ms ? p.start_ms - t : t > p.end_ms ? t - p.end_ms : 0);
+
   // Moves an item to new times; an anchored item keeps its anchor word and gets the matching offset (rule 14).
   const retime = (it: PlanItem, start: number, end: number) => {
     it.start_ms = start;
@@ -232,8 +270,9 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
     return null;
   };
 
-  // Rule 6: the overlay in a zone that fits every output (its own zone first); null when none does.
-  const placeZone = (it: PlanItem): 'ok' | 'moved' | null => {
+  // Rule 6: the overlay in a zone that fits every output (its own zone first); null when none does, or
+  // `content_collision` when one would fit but for the content it covers.
+  const placeZone = (it: PlanItem): 'ok' | 'moved' | 'content_collision' | null => {
     const comp = it.component;
     const shape =
       comp && comp.type === 'styled_text'
@@ -247,7 +286,10 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
     const own = it.position?.zone;
     const prefs: ZoneId[] = own ? [own] : ['upper_center'];
     const zone = placeOverlay(shape, prefs, it.start_ms, it.end_ms, geo);
-    if (!zone) return null;
+    if (!zone) {
+      const clear = ctx.keepouts?.length && placeOverlay(shape, prefs, it.start_ms, it.end_ms, { ...geo, keepouts: [] });
+      return clear ? 'content_collision' : null;
+    }
     if (zone === own) return 'ok';
     it.position = { zone };
     return 'moved';
@@ -322,7 +364,8 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
           log(13, 'style_fixed', 'repaired');
         }
       } else if (!usable(text.style_preset)) {
-        const other = looks.find((l) => usable(l.id));
+        // the look an effect with no bound look takes in its place has a background, as every text overlay has
+        const other = looks.find((l) => usable(l.id) && hasBackground(l)) ?? looks.find((l) => usable(l.id));
         if (!other) return drop(13, 'style_not_in_capabilities');
         text.style_preset = other.id;
         log(13, 'style_fixed', 'repaired');
@@ -370,11 +413,29 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
       log(4, want > dur ? 'lengthened' : 'shortened', 'repaired');
     }
 
-    // Rule 3: inside one free window.
-    const fit = fitWindow(it, min);
+    // Rule 3: inside one free window; an effect that may sit in a drawing (`in_drawing`) goes over the strokes, so it needs none.
+    const fit = entry.in_drawing ? 'ok' : fitWindow(it, min);
     if (!fit) return drop(3, 'no_window');
     if (fit !== 'ok') log(3, fit, 'repaired');
     dur = it.end_ms - it.start_ms;
+
+    // Rule 17: a face move for a sentence (a facecam effect that serves sentence moments, outside drawings) starts near a pause,
+    // not in the middle of a phrase: else it moves to the nearest pause that keeps its free window, else it is dropped.
+    if (entry.layer === 'facecam' && !entry.in_drawing && entry.moments?.some((m) => SENTENCE_LABELS.includes(m))) {
+      if (!pauses.some((p) => pauseDistance(p, it.start_ms) <= FACE_NEAR_MS)) {
+        const to = pauses
+          .map((p) => Math.min(Math.max(it.start_ms, p.start_ms), p.end_ms))
+          .filter(
+            (start) =>
+              Math.abs(start - it.start_ms) <= FACE_SHIFT_MAX_MS &&
+              ctx.windows.some((w) => w.start_ms <= start && start + dur <= w.end_ms)
+          )
+          .sort((a, b) => Math.abs(a - it.start_ms) - Math.abs(b - it.start_ms))[0];
+        if (to === undefined) return drop(17, 'face_move_mid_phrase');
+        retime(it, to, to + dur);
+        log(17, 'face_move_mid_phrase', 'repaired');
+      }
+    }
 
     // Rule 12: the clip fit factor from the final duration, between 1.0 and 3.0.
     if (comp && comp.type === 'icon_video') {
@@ -414,6 +475,30 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
         log(5, 'param_clamped', 'repaired');
       }
     }
+    // a string param is one of the effect's own values (else the first), a fill colour is `#RRGGBB`, and a box of the master
+    // frame (`x`, `w` and `y`, `h`) stays inside it
+    for (const [key, values] of Object.entries(entry.param_enums || {})) {
+      const v = it.params[key];
+      if (typeof v !== 'string' || !values.includes(v)) {
+        it.params[key] = values[0];
+        log(5, 'param_enum_reset', 'repaired');
+      }
+    }
+    if ('fill_color' in it.params) {
+      const v = it.params.fill_color;
+      if (typeof v !== 'string' || !HEX_COLOR.test(v)) {
+        it.params.fill_color = FILL_COLOR_DEFAULT;
+        log(5, 'fill_color_reset', 'repaired');
+      }
+    }
+    for (const [pos, size] of [['x', 'w'], ['y', 'h']]) {
+      const at = it.params[pos];
+      const len = it.params[size];
+      if (typeof at === 'number' && typeof len === 'number' && at + len > 1 + 1e-9) {
+        it.params[pos] = Math.floor((1 - len) * 1000) / 1000;
+        log(5, 'param_box_fixed', 'repaired');
+      }
+    }
     if (motions) {
       for (const code of repairMotionParams(it.params, entry.default_params)) log(5, code, 'repaired');
       // a motion the phone did not list (the legacy five when it listed none) is swapped for one it draws
@@ -437,18 +522,20 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
       }
     }
 
-    // Rule 6: an overlay stays inside every output's safe rectangle, off the caption band and the facecam.
+    // Rule 6: an overlay stays inside every output's safe rectangle, off the caption band, the facecam and the content.
     if (it.target === 'overlay') {
       const placed = placeZone(it);
       if (!placed) return drop(6, 'no_zone');
+      if (placed === 'content_collision') return drop(6, 'content_collision');
       if (placed === 'moved') log(6, 'zone_moved', 'repaired');
     }
 
-    // Rule 7: the level's budget of feature effects and icons (captions and transitions do not count).
-    if (isFeature(it) && kept.filter(isFeature).length >= rules.max_feature_effects) {
+    // Rule 7: the level's budget of feature effects and icons for the video's duration (captions and transitions do
+    // not count).
+    if (isFeature(it) && kept.filter(isFeature).length >= budget.features) {
       return drop(7, 'over_budget');
     }
-    if (it.layer === 'icon' && kept.filter((k) => k.layer === 'icon').length >= rules.max_icons) {
+    if (it.layer === 'icon' && kept.filter((k) => k.layer === 'icon').length >= budget.icons) {
       return drop(7, 'over_icon_budget');
     }
 
@@ -471,9 +558,9 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
       }
     }
 
-    // Rules 8 and 9: cooldown and count per video, then at most 2 active, one overlay, no two cost H together.
+    // Rules 8 and 9: cooldown and count per minute of video, then at most 2 active, one overlay, no two cost H together.
     const same = kept.filter((k) => k.effect === it.effect).map((k) => k.start_ms);
-    const cool = cooldownConflict(entry, same, it.start_ms);
+    const cool = cooldownConflict(entry, same, it.start_ms, plan.video.output_duration_ms);
     if (cool) return swapOrDrop(raw, kept, entry, canSwap, sink, 8, cool);
     const busy = concurrencyConflict(kept, it);
     if (busy) {
@@ -481,8 +568,10 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
       const next = Math.max(...kept.filter((k) => overlaps(k, it)).map((k) => k.end_ms));
       const moved = cloneItem(it);
       retime(moved, next, next + dur2);
-      const holds = ctx.windows.some((w) => w.start_ms <= moved.start_ms && moved.end_ms <= w.end_ms);
-      const zoneOk = moved.target !== 'overlay' || placeZone(moved) !== null;
+      const holds =
+        !!entry.in_drawing || ctx.windows.some((w) => w.start_ms <= moved.start_ms && moved.end_ms <= w.end_ms);
+      const zoned = moved.target === 'overlay' ? placeZone(moved) : 'ok';
+      const zoneOk = zoned === 'ok' || zoned === 'moved';
       if (holds && zoneOk && !concurrencyConflict(kept, moved)) {
         log(9, 'shifted', 'repaired', moved);
         return moved;
@@ -503,10 +592,12 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
     rule: number,
     code: string
   ): PlanItem | null => {
-    if (canSwap) {
+    // an effect only a director's pick places is never swapped for, nor swapped away from: its params and its moment would be lost
+    if (canSwap && !momentOnly(entry)) {
       const options = EFFECTS.filter(
         (e: RegistryEntry) =>
           e.id !== entry.id &&
+          !momentOnly(e) &&
           e.layer === entry.layer &&
           e.target === entry.target &&
           e.requires.length === 0 &&
@@ -543,6 +634,84 @@ export const validatePlan = (plan: Plan, ctx: ValidationContext): ValidationResu
   for (const raw of ordered) {
     const done = repair(raw, kept, true, logged);
     if (done) kept.push(done);
+  }
+
+  // Rule 17: a facecam move of a moment shares no time with another facecam move, a facecam effect or a layout effect that
+  // moves the face: it is shortened to end where the other one starts, else dropped (the later one of two moves stays).
+  for (const move of kept.filter(isFaceMove).sort((a, b) => a.start_ms - b.start_ms)) {
+    const clash = kept.filter((o) => o !== move && overlaps(o, move) && movesFace(o));
+    if (!clash.length) continue;
+    const before = snapshot(move, ctx.request.language);
+    const end = Math.min(...clash.map((o) => o.start_ms));
+    const [min] = durationBounds(effectById(move.effect) as RegistryEntry, move.component, ctx.request.language);
+    if (end - move.start_ms >= min) {
+      move.end_ms = end;
+      logged.push({
+        id: move.id,
+        effect: move.effect,
+        rule: 17,
+        code: 'face_move_overlap',
+        action: 'repaired',
+        changed: changeBetween(before, snapshot(move, ctx.request.language)),
+      });
+    } else {
+      kept = kept.filter((k) => k !== move);
+      logged.push({ id: move.id, effect: move.effect, rule: 17, code: 'face_move_overlap', action: 'dropped', changed: {} });
+    }
+  }
+
+  // Rule 18: video, facecam and transition items are `BREATHING_GAP_MS` apart (end to start), except the two items of one
+  // drawing moment. The later one moves to start that long after the one it crowds, when it keeps every other rule there
+  // (`repair` checks them again); a transition stays at its cut, so it is dropped, like an item that cannot move.
+  const pairs = new Set((ctx.drawing_pairs || []).flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
+  const crowdedBy = (settled: PlanItem[], item: PlanItem) => crowding(settled, item, (p) => pairs.has(`${p.id}|${item.id}`));
+  const settled: PlanItem[] = [];
+  for (const item of kept.filter((k) => BREATHING_LAYERS.includes(k.layer)).sort((a, b) => a.start_ms - b.start_ms)) {
+    const crowded = crowdedBy(settled, item);
+    if (!crowded.length) {
+      settled.push(item);
+      continue;
+    }
+    const dur = item.end_ms - item.start_ms;
+    const start = Math.max(...crowded.map((s) => s.end_ms)) + BREATHING_GAP_MS;
+    const moved = cloneItem(item);
+    retime(moved, start, start + dur);
+    const done =
+      item.layer !== 'transition' && start + dur <= plan.video.output_duration_ms
+        ? repair(
+            moved,
+            kept.filter((k) => k !== item),
+            false,
+            []
+          )
+        : null;
+    if (done && !crowdedBy(settled, done).length) {
+      logged.push({
+        id: item.id,
+        effect: item.effect,
+        rule: 18,
+        code: 'breathing_gap',
+        action: 'repaired',
+        changed: changeBetween(snapshot(item, ctx.request.language), snapshot(done, ctx.request.language)),
+      });
+      kept = kept.map((k) => (k === item ? done : k));
+      settled.push(done);
+    } else {
+      kept = kept.filter((k) => k !== item);
+      logged.push({ id: item.id, effect: item.effect, rule: 18, code: 'breathing_gap', action: 'dropped', changed: {} });
+    }
+  }
+
+  // Rule 19: two flashes (`isFlash`) start `FLASH_GAP_MS` apart at least; the later one is dropped. After rule 18, so that its
+  // shifts cannot bring two flashes closer.
+  let lastFlash: PlanItem | undefined;
+  for (const item of kept.filter(isFlash).sort((a, b) => a.start_ms - b.start_ms)) {
+    if (lastFlash && item.start_ms - lastFlash.start_ms < FLASH_GAP_MS) {
+      kept = kept.filter((k) => k !== item);
+      logged.push({ id: item.id, effect: item.effect, rule: 19, code: 'flash_spacing', action: 'dropped', changed: {} });
+    } else {
+      lastFlash = item;
+    }
   }
 
   // Rule 16: sorted by start, ids unique.

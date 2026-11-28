@@ -92,6 +92,57 @@ describe('ai.video-editing: silenceCuts', () => {
   });
 });
 
+describe('ai.video-editing: silenceCuts inside a sentence', () => {
+  // gaps: 600 (a to b), 600 (b to c), 1100 (c to d), 600 (d to e); the sentence ends after b
+  const spoken = toEditWords([
+    { text: 'a', startMs: 0, endMs: 200, type: 'word' },
+    { text: 'b.', startMs: 800, endMs: 1000, type: 'word' },
+    { text: 'c', startMs: 1600, endMs: 1800, type: 'word' },
+    { text: 'd', startMs: 2900, endMs: 3100, type: 'word' },
+    { text: 'e', startMs: 3700, endMs: 3900, type: 'word' },
+  ]);
+  const calm = { sentenceEnds: new Set([1]), minInsideMs: 1000 };
+
+  it('cuts every gap of 600 ms or more without sentence ends (lively, no direction)', () => {
+    expect(silenceCuts(spoken, [])).toEqual([
+      cut(320, 680),
+      cut(1120, 1480),
+      cut(1920, 2780),
+      cut(3220, 3580),
+    ]);
+  });
+
+  it('does not cut a 600 ms gap inside a sentence in calm', () => {
+    const cuts = silenceCuts(spoken, [], calm);
+    expect(cuts).not.toContainEqual(cut(320, 680));
+    expect(cuts).not.toContainEqual(cut(3220, 3580));
+  });
+
+  it('cuts a 600 ms gap after a sentence end in calm', () => {
+    expect(silenceCuts(spoken, [], calm)).toContainEqual(cut(1120, 1480));
+  });
+
+  it('cuts a 1100 ms gap inside a sentence in calm', () => {
+    expect(silenceCuts(spoken, [], calm)).toEqual([cut(1120, 1480), cut(1920, 2780)]);
+  });
+
+  it('keeps the lead-in and the tail as they are in calm', () => {
+    const edges = toEditWords([
+      { text: 'a', startMs: 700, endMs: 900, type: 'word' },
+      { text: 'b', startMs: 1000, endMs: 1200, type: 'word' },
+    ]);
+    expect(silenceCuts(edges, [], { ...calm, sentenceEnds: new Set<number>(), durationMs: 2000 })).toEqual([
+      cut(0, 580),
+      cut(1320, 2000),
+    ]);
+  });
+
+  it('needs both options: either alone cuts as before', () => {
+    expect(silenceCuts(spoken, [], { sentenceEnds: new Set([1]) })).toEqual(silenceCuts(spoken, []));
+    expect(silenceCuts(spoken, [], { minInsideMs: 1000 })).toEqual(silenceCuts(spoken, []));
+  });
+});
+
 describe('ai.video-editing: buildMap', () => {
   it('lays the kept pieces end to end', () => {
     const map = buildMap(DURATION_MS, ALL_CUTS);

@@ -17,6 +17,13 @@ export class AiVideoEditActivity {
     return this._aiVideoEditsService.transcribeEdit(editId);
   }
 
+  // Labels the sentences of the words and picks the style of the video (Standard and Heavy); added with
+  // aiVideoEditWorkflowV101, the workflows before it never call it.
+  @ActivityMethod()
+  async directEdit({ editId }: { editId: string }) {
+    return this._aiVideoEditsService.directEdit(editId);
+  }
+
   // Scores the proxy pieces (Standard and Heavy).
   @ActivityMethod()
   async perceiveEdit({ editId }: { editId: string }) {

@@ -28,11 +28,21 @@ export interface Box {
 // is known: its box and border make the block larger than the text, see `lookSizeFactor`) or an icon or mp4 clip square.
 export type OverlayShape = { type: 'text'; text: string; language?: string; look?: TextLook } | { type: 'icon' };
 
-// What the geometry needs to know: the master's size, the enabled outputs and the facecam on the output timeline.
+// A stretch of the output timeline where a part of the master frame holds the content (the user's ink, the slide's title),
+// which a text or an icon must not cover. `region` is in master fractions (x, y, w, h), like a brush entry's.
+export interface ContentKeepOut {
+  start_ms: number;
+  end_ms: number;
+  region: { x: number; y: number; w: number; h: number };
+}
+
+// What the geometry needs to know: the master's size, the enabled outputs, the facecam on the output timeline and (when
+// the request shows content to keep clear) its keep-outs on the output timeline.
 export interface GeometryContext {
   video: { width: number; height: number };
   outputs: EditRequestOutput[];
   facecam: PlanFacecamKey[];
+  keepouts?: ContentKeepOut[];
 }
 
 // The estimate of an overlay's size. A character of the normal width class is `char_w` of the output width wide (the
@@ -54,6 +64,9 @@ export const OVERLAY_SIZE = {
 
 // The margin kept around the facecam circle, as a fraction of the output.
 export const FACECAM_MARGIN = 0.02;
+
+// The margin kept around content (ink, a slide title), as a fraction of the output.
+export const CONTENT_MARGIN = 0.02;
 
 // Zones in the order the planner tries them; the first one fitting every output is used.
 export const ZONE_ORDER: ZoneId[] = [
@@ -209,12 +222,27 @@ export const facecamBox = (
   return visible ? box : null;
 };
 
+// A content region (master fractions) in one output's frame, padded by `CONTENT_MARGIN`, or null when no part of it lies
+// inside the crop.
+export const contentBox = (region: ContentKeepOut['region'], output: EditRequestOutput): Box | null => {
+  const c = output.crop;
+  if (c.w <= 0 || c.h <= 0) return null;
+  const box = {
+    x0: (region.x - c.x) / c.w - CONTENT_MARGIN,
+    x1: (region.x + region.w - c.x) / c.w + CONTENT_MARGIN,
+    y0: (region.y - c.y) / c.h - CONTENT_MARGIN,
+    y1: (region.y + region.h - c.y) / c.h + CONTENT_MARGIN,
+  };
+  return boxesOverlap(box, { x0: 0, x1: 1, y0: 0, y1: 1 }) ? box : null;
+};
+
 // Whether a box lies inside a rectangle.
 const inside = (b: Box, r: Box) =>
   b.x0 >= r.x0 - EPS && b.x1 <= r.x1 + EPS && b.y0 >= r.y0 - EPS && b.y1 <= r.y1 + EPS;
 
 // Whether an overlay in a zone is allowed during [startMs, endMs): a text the phone can lay out, inside every
-// output's safe rectangle, outside every caption band and clear of the facecam wherever the facecam shows in that output.
+// output's safe rectangle, outside every caption band, clear of the facecam wherever the facecam shows in that output and
+// clear of the content keep-outs that are live while the overlay shows.
 export const overlayFits = (
   shape: OverlayShape,
   zone: ZoneId,
@@ -229,16 +257,18 @@ export const overlayFits = (
   for (const output of ctx.outputs) {
     const box = overlayBox(shape, zone, output);
     if (!inside(box, OUTPUTS[output.ratio].safe)) return false;
-    const band: Box = {
-      x0: 0,
-      x1: 1,
-      y0: output.caption_band.y0,
-      y1: output.caption_band.y1,
-    };
-    if (boxesOverlap(box, band)) return false;
+    if (output.caption_band) {
+      const band: Box = { x0: 0, x1: 1, y0: output.caption_band.y0, y1: output.caption_band.y1 };
+      if (boxesOverlap(box, band)) return false;
+    }
     for (const key of keys) {
       const face = facecamBox(key, ctx.video, output);
       if (face && boxesOverlap(box, face)) return false;
+    }
+    for (const keep of ctx.keepouts || []) {
+      if (keep.start_ms >= endMs || keep.end_ms <= startMs) continue;
+      const content = contentBox(keep.region, output);
+      if (content && boxesOverlap(box, content)) return false;
     }
   }
   return true;

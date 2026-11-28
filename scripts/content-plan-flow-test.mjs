@@ -1,9 +1,9 @@
 // Standalone test of the content plan flow. It reads every prompt text straight out of to-build/tasks.md (B1 step 4), so it
 // tests the written plan and not anyone's copy of it. It makes real calls to the Meta Model API and writes every step's
-// input and output, plus REPORT.md, to to-build/content-plan-flow-test-output/<time>/.
+// input and output, plus REPORT.md, to scripts/content-plan-flow-test-output/<time>/.
 //
 // Run (from the repo root):
-//   node --env-file=.env to-build/content-plan-flow-test.mjs
+//   node --env-file=.env scripts/content-plan-flow-test.mjs
 // Options: --input <text file>   the owner's business text (default: a built-in neutral example)
 //          --videos <1-7>        videos per week (default 3)      --rounds <n>  max setup rounds (default 3)
 //          --name <brand name>   --locale <code> (default en)      --tasks <path to tasks.md>
@@ -16,7 +16,7 @@ import path from 'node:path';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => { const i = argv.indexOf('--' + name); return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback; };
-const TASKS = opt('tasks', path.join(HERE, 'tasks.md'));
+const TASKS = opt('tasks', path.join(HERE, '..', 'to-build', 'tasks.md'));
 const N = Number(opt('videos', 3));
 const MAX_ROUNDS = Number(opt('rounds', 3));
 const BRAND = { name: opt('name', 'Brightside Dental'), locale: opt('locale', 'en') };

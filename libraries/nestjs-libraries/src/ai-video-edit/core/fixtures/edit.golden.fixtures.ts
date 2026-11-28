@@ -66,10 +66,12 @@ export const LEGACY_CAPABILITIES = {
   text_styles: FULL_CAPABILITIES.text_styles,
 };
 
-// A test look table (card S9): the shipped looks, but `sticker` draws a left to right gradient on the text, so it needs the
+// A test look table (card S9): the shipped looks, but `label_pill` draws a left to right gradient on the text, so it needs the
 // feature below. Today's six looks need no feature, so a spec brings this table to the chooser and the validator instead
-// of adding a look to `TEXT_LOOKS` (which a snapshot freezes).
-export const GATED_LOOK_ID = 'sticker';
+// of adding a look to `TEXT_LOOKS` (which a snapshot freezes). It is `label_pill` because every text look has a
+// background (TS13): the chooser plans no look without one, and `label_pill` is the shipped look that has one and
+// needs no feature of its own.
+export const GATED_LOOK_ID = 'label_pill';
 export const GATED_LOOK_FEATURE = 'text_gradient_ltr';
 export const GATED_LOOKS: TextLook[] = TEXT_LOOKS.map((l) =>
   l.id === GATED_LOOK_ID ? { ...l, text_fill: { kind: 'gradient', direction: 'ltr', from: 'accent', to: 'paper' } } : l
@@ -84,13 +86,17 @@ export interface GoldenFixture {
   words: RawWord[];
   activity: ActivityEntry[];
   facecam: FacecamKey[];
+  // The video's length when it is not the last word plus 1.5 s, and the topic changes the request carries.
+  duration_ms?: number;
+  chapters?: EditRequest['chapters'];
 }
 
-// The request of a fixture: 1.5 s of silence after the last word, all three outputs, every effect available.
+// The request of a fixture: 1.5 s of silence after the last word (unless it says its length), all three outputs, every effect
+// available.
 export const goldenRequest = (f: GoldenFixture): EditRequest => ({
   contract_version: 2,
   video: {
-    duration_ms: f.words[f.words.length - 1].endMs + 1500,
+    duration_ms: f.duration_ms ?? f.words[f.words.length - 1].endMs + 1500,
     width: 1080,
     height: 2400,
     fps: 30,
@@ -99,6 +105,7 @@ export const goldenRequest = (f: GoldenFixture): EditRequest => ({
   outputs: ALL_OUTPUTS,
   facecam_track: f.facecam,
   activity_map: f.activity,
+  ...(f.chapters ? { chapters: f.chapters } : {}),
   text_colors: 'multi',
   language: f.language,
   capabilities: FULL_CAPABILITIES,
@@ -213,3 +220,93 @@ export const GOLDEN_FIXTURES: GoldenFixture[] = [
     ],
   },
 ];
+
+// The trust sample (task TS8): a screen recording about a "nicely edited video", 122 synthetic words at the timings of the
+// owner's real transcript (no real word is kept: `w1..w122`, the marks stay on the 9 sentence ends), and the activity map of
+// its event log (3 slide changes, 4 brush strokes, the board shown and hidden), 67.966 s long, with a large facecam.
+const TRUST_TIMES: [number, number][] = [
+  [880, 940], [1040, 1500], [1600, 1900], [2060, 2340], [2440, 2780], [2880, 3260], [3600, 4040], [4760, 5020],
+  [5240, 5360], [5400, 5520], [5820, 6020], [6120, 6260], [6420, 6740], [6920, 7320], [7420, 8080], [8200, 8460],
+  [8700, 8980], [9320, 9620], [10040, 10400], [10460, 10820], [10900, 11080], [11460, 12020], [12120, 12440],
+  [12620, 13080], [13140, 13360], [13780, 14000], [14500, 14520], [14540, 14680], [14740, 15020], [15380, 15520],
+  [15760, 16200], [16680, 16960], [17240, 17700], [17960, 18280], [18340, 18660], [18720, 19000], [19100, 19220],
+  [19260, 19380], [19480, 19760], [19860, 19960], [20420, 20600], [20680, 21120], [21200, 21600], [21720, 22020],
+  [22640, 23060], [23140, 23600], [23700, 24080], [24800, 25180], [25240, 25440], [26100, 26400], [26800, 27080],
+  [28220, 28320], [29740, 30040], [30380, 30800], [31020, 31100], [31160, 31380], [31460, 31700], [31940, 32200],
+  [32259, 32420], [32460, 32619], [32800, 33200], [33260, 33420], [33640, 34140], [34260, 34480], [34560, 34960],
+  [35060, 35260], [35680, 36000], [36060, 36440], [36540, 36880], [37060, 37320], [38160, 38600], [38680, 39020],
+  [39620, 40040], [40160, 40460], [40560, 41280], [41640, 41800], [41980, 42460], [42540, 42780], [42860, 43440],
+  [43520, 43580], [43600, 43700], [43740, 44180], [44220, 44400], [45040, 45080], [45120, 45260], [45320, 45600],
+  [46040, 46060], [46080, 46200], [46920, 47340], [47380, 47540], [47600, 47800], [48260, 48440], [48880, 48900],
+  [48940, 49040], [49100, 49400], [49500, 49600], [49640, 50040], [50120, 50540], [50620, 50760], [51440, 51960],
+  [52100, 52500], [52680, 53020], [53080, 53460], [53900, 54260], [54320, 54680], [55700, 55980], [56940, 57180],
+  [57300, 57400], [57540, 57840], [58280, 58900], [59380, 59840], [59980, 60200], [60600, 60840], [60900, 61280],
+  [61560, 61920], [61980, 62380], [62440, 62840], [63340, 63580], [64160, 64500], [64620, 64900], [65000, 65459],
+  [65920, 66520],
+];
+
+// The words that end a sentence (1 based): 9 sentences, s1 to s9.
+export const TRUST_SENTENCE_ENDS = [7, 50, 65, 72, 82, 101, 105, 117, 122];
+
+const trustWords: RawWord[] = TRUST_TIMES.map(([startMs, endMs], k) => ({
+  text: `w${k + 1}${TRUST_SENTENCE_ENDS.includes(k + 1) ? '.' : ''}`,
+  startMs,
+  endMs,
+  type: 'word',
+}));
+
+const trustEntry = (
+  id: string,
+  type: ActivityEntry['type'],
+  start_ms: number,
+  end_ms: number,
+  region: ActivityEntry['region']
+): ActivityEntry => ({ id, type, start_ms, end_ms, region, strength: 1, source: 'event_log' });
+
+const WHOLE = { x: 0, y: 0, w: 1, h: 1 };
+
+export const TRUST_SAMPLE: GoldenFixture = {
+  name: 'trust sample',
+  language: 'eng',
+  words: trustWords,
+  activity: [
+    trustEntry('a1', 'slide_change', 4785, 4785, WHOLE),
+    trustEntry('a2', 'brush', 9887, 10507, { x: 0.1476, y: 0.1134, w: 0.5563, h: 0.0903 }),
+    trustEntry('a3', 'brush', 13908, 14350, { x: 0.2382, y: 0.1563, w: 0.5777, h: 0.1305 }),
+    trustEntry('a4', 'slide_change', 28012, 28012, WHOLE),
+    trustEntry('a5', 'brush', 45811, 46528, { x: 0.3707, y: 0.0832, w: 0.4577, h: 0.1311 }),
+    trustEntry('a6', 'board_show', 48394, 48394, WHOLE),
+    trustEntry('a7', 'brush', 49511, 49877, { x: 0.2385, y: 0.1153, w: 0.6372, h: 0.1669 }),
+    trustEntry('a8', 'board_hide', 53387, 53387, WHOLE),
+    trustEntry('a9', 'slide_change', 54977, 54977, WHOLE),
+  ],
+  facecam: [{ t_ms: 0, cx: 0.5005, cy: 0.4194, r: 0.3125 }],
+  duration_ms: 67966,
+  chapters: [
+    { start_ms: 0, kind: 'text', title: 'T1' },
+    { start_ms: 4785, kind: 'text', title: 'T2' },
+    { start_ms: 28012, kind: 'text', title: 'T3' },
+    { start_ms: 54977, kind: 'text', title: 'T4' },
+  ],
+};
+
+// What the director answered for the sample: a calm video, the hook first, two claims and the recap last; every other
+// sentence stays plain.
+export const TRUST_DIRECTOR_ANSWER = {
+  style: 'calm' as const,
+  labels: [
+    { id: 's1', label: 'hook' },
+    { id: 's2', label: 'claim' },
+    { id: 's5', label: 'claim' },
+    { id: 's9', label: 'recap' },
+  ],
+};
+
+// What Clef-omni picked: the face steps aside and the screen spotlights the first drawing, a dip to black at the second topic
+// change, the face grows on the first claim. Every other moment has no pick.
+export const TRUST_PICKS: Record<string, string> = {
+  'd1:face': 'f_step_aside',
+  'd1:screen': 'v_spotlight',
+  c2: 'tr_dip_color',
+  s2: 'f_hero',
+};

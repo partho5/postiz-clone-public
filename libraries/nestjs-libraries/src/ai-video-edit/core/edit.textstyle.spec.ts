@@ -4,8 +4,8 @@
 // validator keeps as they are. Needs no database and no Nest.
 import { EDIT_LEVELS, EditLevel, TextKind, ZONES, ZoneId } from '../contract/edit.contract';
 import { LEGACY_TEXT_MOTIONS, repairMotionParams, swapUnusableMotions, textMotionsOf } from '../contract/edit.motions';
-import { effectById } from '../contract/edit.registry';
-import { TEXT_FEATURES, TEXT_LOOKS, lookUsable, requiredFeatures, textLookById } from '../contract/edit.styles';
+import { EFFECTS, effectById } from '../contract/edit.registry';
+import { TEXT_FEATURES, TEXT_LOOKS, hasBackground, lookUsable, requiredFeatures, textLookById } from '../contract/edit.styles';
 import { MOODS } from './edit.perception';
 import { TextStyle, chooseTextStyle, textEnergy, textStyleCandidates, tiltFromId } from './edit.textstyle';
 import {
@@ -19,6 +19,10 @@ import {
 // The looks released before card S8 and the ten of card S8.
 const SHIPPED_IDS = ['sticker', 'label_pill', '3d', 'glow', 'gradient', 'highlighter'];
 const NEW_IDS = TEXT_LOOKS.map((look) => look.id).filter((id) => !SHIPPED_IDS.includes(id));
+// Every text look has a background (TS13): the shipped looks a phone with no feature listed can be given, and a phone that
+// lists every feature (the looks without a background are drawn as the box looks they map to, so they are never chosen).
+const SHIPPED_BOXED_IDS = SHIPPED_IDS.filter((id) => hasBackground(textLookById(id)!));
+const BOXED = { ...FULL_CAPABILITIES, text_features: TEXT_FEATURES };
 
 const ZONE_IDS = Object.keys(ZONES) as ZoneId[];
 const KINDS: TextKind[] = ['hook', 'keyword_echo'];
@@ -80,15 +84,17 @@ describe('ai.video-editing: chooseTextStyle, mood to energy', () => {
   });
 
   it('leaves out the stamp for a calm text and keeps it for a lively one', () => {
-    const calm = textStyleCandidates('keyword_echo', 'calm', 'standard', FULL_CAPABILITIES).map((c) => c.effect);
-    const lively = textStyleCandidates('keyword_echo', 'excited', 'standard', FULL_CAPABILITIES).map((c) => c.effect);
+    const calm = textStyleCandidates('keyword_echo', 'calm', 'standard', BOXED).map((c) => c.effect);
+    const lively = textStyleCandidates('keyword_echo', 'excited', 'standard', BOXED).map((c) => c.effect);
     expect(calm).not.toContain('x_stamp');
     expect(lively).toContain('x_stamp');
   });
 
   it('keeps the entry of a fixed effect and the sweep of the highlighter', () => {
-    const stamp = everyStyle(FULL_CAPABILITIES).filter((c) => c.style.effect === 'x_stamp');
-    const sweep = everyStyle(FULL_CAPABILITIES).filter((c) => c.style.effect === 'x_marker_sweep');
+    // only the two fixed effects are allowed, so the first positions of the rotation reach them
+    const caps = { ...BOXED, effects: ['x_stamp', 'x_marker_sweep'] };
+    const stamp = everyStyle(caps).filter((c) => c.style.effect === 'x_stamp');
+    const sweep = everyStyle(caps).filter((c) => c.style.effect === 'x_marker_sweep');
     expect(stamp.length).toBeGreaterThan(0);
     expect(sweep.length).toBeGreaterThan(0);
     for (const { style } of stamp) expect(style.entry).toBe('stamp');
@@ -177,17 +183,21 @@ describe('ai.video-editing: chooseTextStyle, what the phone listed', () => {
   });
 
   it('never chooses a look the phone did not list', () => {
-    for (const listed of [['sticker'], ['glow', 'gradient'], ['label_pill', '3d', 'highlighter']]) {
-      const caps = { ...FULL_CAPABILITIES, text_styles: listed };
-      for (const { style } of everyStyle(caps)) expect(listed).toContain(style.look);
+    for (const listed of [['tilt_sticker'], ['neon_box', 'gradient_block'], ['label_pill', '3d', 'highlighter']]) {
+      const caps = { ...BOXED, text_styles: listed };
+      const looks = everyStyle(caps).map(({ style }) => style.look);
+      expect(looks.length).toBeGreaterThan(0);
+      for (const look of looks) expect(listed).toContain(look);
     }
     expect(chooseTextStyle('hook', undefined, 'upper_center', { pair: 0, motion: 0 }, 'heavy', { ...FULL_CAPABILITIES, text_styles: [] })).toBeNull();
     expect(textStyleCandidates('hook', undefined, 'heavy', { ...FULL_CAPABILITIES, text_styles: [] })).toEqual([]);
   });
 
   it('never chooses an effect the phone or the level does not allow', () => {
-    const caps = { ...FULL_CAPABILITIES, effects: ['x_sticker', 'x_3d', 'x_gradient'] };
-    for (const { level, style } of everyStyle(caps)) {
+    const caps = { ...BOXED, effects: ['x_sticker', 'x_3d', 'x_gradient'] };
+    const chosen = everyStyle(caps);
+    expect(chosen.length).toBeGreaterThan(0);
+    for (const { level, style } of chosen) {
       expect(caps.effects).toContain(style.effect);
       expect(EDIT_LEVELS.indexOf(effectById(style.effect)!.min_level)).toBeLessThanOrEqual(EDIT_LEVELS.indexOf(level));
     }
@@ -195,7 +205,7 @@ describe('ai.video-editing: chooseTextStyle, what the phone listed', () => {
   });
 
   it('leaves out a fixed effect whose entry the phone does not draw', () => {
-    const caps = { ...FULL_CAPABILITIES, text_motions: ['pop', 'sweep'] };
+    const caps = { ...BOXED, text_motions: ['pop', 'sweep'] };
     const effects = textStyleCandidates('hook', undefined, 'heavy', caps).map((c) => c.effect);
     expect(effects).toContain('x_marker_sweep');
     expect(effects).not.toContain('x_stamp');
@@ -204,11 +214,12 @@ describe('ai.video-editing: chooseTextStyle, what the phone listed', () => {
 
 describe('ai.video-editing: chooseTextStyle, the same input gives the same style', () => {
   it('answers the same style for the same input and wraps a cursor past the candidates', () => {
-    const a = chooseTextStyle('hook', 'excited', 'upper_left', { pair: 3, motion: 5 }, 'heavy', FULL_CAPABILITIES);
-    const b = chooseTextStyle('hook', 'excited', 'upper_left', { pair: 3, motion: 5 }, 'heavy', FULL_CAPABILITIES);
+    const a = chooseTextStyle('hook', 'excited', 'upper_left', { pair: 3, motion: 5 }, 'heavy', BOXED);
+    const b = chooseTextStyle('hook', 'excited', 'upper_left', { pair: 3, motion: 5 }, 'heavy', BOXED);
     expect(a).toEqual(b);
-    const n = textStyleCandidates('hook', 'excited', 'heavy', FULL_CAPABILITIES).length;
-    const wrapped = chooseTextStyle('hook', 'excited', 'upper_left', { pair: 3 + n, motion: 5 }, 'heavy', FULL_CAPABILITIES);
+    const n = textStyleCandidates('hook', 'excited', 'heavy', BOXED).length;
+    expect(n).toBeGreaterThan(3);
+    const wrapped = chooseTextStyle('hook', 'excited', 'upper_left', { pair: 3 + n, motion: 5 }, 'heavy', BOXED);
     expect(wrapped).toEqual(a);
     expect(a!.index).toBe(3);
   });
@@ -268,12 +279,12 @@ describe('ai.video-editing: tilt', () => {
   });
 
   it('is offered by a look with a range only', () => {
-    const sticker = chooseTextStyle('keyword_echo', undefined, 'upper_center', { pair: 0, motion: 0 }, 'basic', FULL_CAPABILITIES)!;
-    expect(sticker.look).toBe('sticker');
-    expect(sticker.tilt).toEqual(textLookById('sticker')!.tilt_deg);
-    const pill = chooseTextStyle('keyword_echo', undefined, 'upper_center', { pair: 1, motion: 0 }, 'basic', FULL_CAPABILITIES)!;
-    expect(pill.look).toBe('label_pill');
-    expect(pill.tilt).toBeNull();
+    const sticker = chooseTextStyle('keyword_echo', undefined, 'upper_center', { pair: 0, motion: 0 }, 'basic', BOXED)!;
+    expect(sticker.look).toBe('tilt_sticker');
+    expect(sticker.tilt).toEqual(textLookById('tilt_sticker')!.tilt_deg);
+    const ring = chooseTextStyle('keyword_echo', undefined, 'upper_center', { pair: 1, motion: 0 }, 'basic', BOXED)!;
+    expect(ring.look).toBe('pill_ring');
+    expect(ring.tilt).toBeNull();
   });
 });
 
@@ -349,7 +360,7 @@ describe('ai.video-editing: chooseTextStyle, the ten new looks (card S8)', () =>
     return out;
   };
 
-  it('plans a phone that lists none of them, or none of their features, exactly as before', () => {
+  it('plans a phone that lists none of them, or none of their features, with the shipped looks that have a background', () => {
     for (const caps of [FULL_CAPABILITIES, LEGACY_CAPABILITIES, { ...FULL_CAPABILITIES, text_features: ['opacity'] }]) {
       const before = { ...caps, text_styles: SHIPPED_IDS };
       for (const level of EDIT_LEVELS) {
@@ -366,21 +377,25 @@ describe('ai.video-editing: chooseTextStyle, the ten new looks (card S8)', () =>
         }
       }
     }
-    expect([...looksOf(FULL_CAPABILITIES)].sort()).toEqual([...SHIPPED_IDS].sort());
+    expect([...looksOf(FULL_CAPABILITIES)].sort()).toEqual([...SHIPPED_BOXED_IDS].sort());
   });
 
-  it('plans a request with no capabilities at all with the looks of the legacy format only', () => {
-    expect([...looksOf(undefined)].sort()).toEqual([...SHIPPED_IDS].sort());
+  it('plans a request with no capabilities at all with the looks of the legacy format that have a background only', () => {
+    expect([...looksOf(undefined)].sort()).toEqual([...SHIPPED_BOXED_IDS].sort());
   });
 
-  it('chooses each of them once the phone lists the look and every feature it needs: two at basic, six at standard, all at heavy', () => {
+  it('chooses each of them once the phone lists the look and every feature it needs: three at basic, seven at standard, all at heavy', () => {
     const all = { ...FULL_CAPABILITIES, text_features: TEXT_FEATURES };
-    expect([...looksOf(all)].sort()).toEqual(TEXT_LOOKS.map((look) => look.id).sort());
-    const newAt = (level: EditLevel) =>
-      textStyleCandidates('hook', undefined, level, all).map((pair) => pair.look).filter((id) => NEW_IDS.includes(id));
-    expect(newAt('basic')).toEqual(['pill_ring', 'solid_round']);
-    expect(newAt('standard')).toEqual(['neon_box', 'pill_ring', 'tilt_sticker', 'solid_round', 'yellow_bold', 'flat_rect']);
-    expect(newAt('heavy')).toEqual(NEW_IDS);
+    // the looks without a background (sticker, 3d, glow, gradient) are drawn as the looks they map to, so none is chosen
+    expect([...looksOf(all)].sort()).toEqual(TEXT_LOOKS.filter(hasBackground).map((look) => look.id).sort());
+    const newAt = (level: EditLevel) => [
+      ...new Set(
+        textStyleCandidates('hook', undefined, level, all).map((pair) => pair.look).filter((id) => NEW_IDS.includes(id))
+      ),
+    ];
+    expect(newAt('basic')).toEqual(['tilt_sticker', 'pill_ring', 'solid_round']);
+    expect(newAt('standard')).toEqual(['tilt_sticker', 'neon_box', 'pill_ring', 'gradient_block', 'solid_round', 'yellow_bold', 'flat_rect']);
+    expect(newAt('heavy').sort()).toEqual([...NEW_IDS].sort());
   });
 
   it.each(NEW_IDS)('chooses %s only with its own features and its own id listed', (id) => {
@@ -443,5 +458,71 @@ describe('ai.video-editing: chooseTextStyle, the ten new looks (card S8)', () =>
         expect(EDIT_LEVELS.indexOf(effectById(effect)!.min_level)).toBeLessThanOrEqual(EDIT_LEVELS.indexOf(level));
       }
     }
+  });
+});
+
+describe('ai.video-editing: every text look has a background (TS13)', () => {
+  const PHONES = [BOXED, FULL_CAPABILITIES, LEGACY_CAPABILITIES, undefined];
+
+  it('never chooses a look without a background, for every kind, mood, zone and level', () => {
+    for (const caps of PHONES) {
+      const chosen = everyStyle(caps);
+      expect(chosen.length).toBeGreaterThan(0);
+      for (const { style } of chosen) expect(hasBackground(textLookById(style.look)!)).toBe(true);
+    }
+  });
+
+  it('offers no look without a background as a candidate either', () => {
+    const bare = TEXT_LOOKS.filter((look) => !hasBackground(look)).map((look) => look.id);
+    expect(bare).toEqual(['sticker', '3d', 'glow', 'gradient']);
+    for (const level of EDIT_LEVELS) {
+      for (const caps of PHONES) {
+        for (const { look } of textStyleCandidates('hook', undefined, level, caps)) expect(bare).not.toContain(look);
+      }
+    }
+  });
+
+  it('still chooses the highlighter, whose bar is a background behind the words', () => {
+    const at = textStyleCandidates('hook', undefined, 'heavy', BOXED).findIndex((c) => c.look === 'highlighter');
+    expect(at).toBeGreaterThanOrEqual(0);
+    const style = chooseTextStyle('hook', undefined, 'upper_center', { pair: at, motion: 0 }, 'heavy', BOXED)!;
+    expect([style.effect, style.look]).toEqual(['x_marker_sweep', 'highlighter']);
+  });
+
+  it('draws the sticker as the tilted sticker, 3d and gradient as the gradient block and glow as the neon box', () => {
+    const at = (level: EditLevel) => textStyleCandidates('hook', undefined, level, BOXED);
+    const lookOf = (level: EditLevel, effect: string) => at(level).find((c) => c.effect === effect)?.look;
+    expect(lookOf('basic', 'x_sticker')).toBe('tilt_sticker');
+    expect(lookOf('standard', 'x_3d')).toBe('gradient_block');
+    expect(lookOf('standard', 'x_glow')).toBe('neon_box');
+    expect(lookOf('standard', 'x_stamp')).toBe('tilt_sticker');
+    expect(lookOf('heavy', 'x_gradient')).toBe('gradient_block');
+  });
+
+  it('never repeats a pair, still varies across the boxed looks, and has no pair for a look the phone does not list', () => {
+    for (const level of EDIT_LEVELS) {
+      const pairs = textStyleCandidates('hook', undefined, level, BOXED).map((c) => `${c.effect}:${c.look}`);
+      expect(new Set(pairs).size).toBe(pairs.length);
+    }
+    const looks = new Set(textStyleCandidates('hook', undefined, 'heavy', BOXED).map((c) => c.look));
+    expect(looks.size).toBeGreaterThanOrEqual(8);
+    // a phone that can draw the box looks only, but not the one a look maps to, gets no pair for it
+    const caps = { ...BOXED, text_styles: ['label_pill'] };
+    expect(textStyleCandidates('hook', undefined, 'standard', caps).map((c) => c.effect)).toEqual(['x_label_tag']);
+  });
+
+  it('binds every text effect that names a look to a look with a background, and x_pop to none', () => {
+    const bound = EFFECTS.filter((e) => typeof e.default_params.style_preset === 'string');
+    expect(bound.map((e) => e.id).sort()).toEqual(['x_3d', 'x_glow', 'x_gradient', 'x_label_tag', 'x_sticker', 'x_tilt_sticker']);
+    for (const entry of bound) {
+      expect(hasBackground(textLookById(String(entry.default_params.style_preset))!)).toBe(true);
+    }
+    expect(effectById('x_sticker')!.default_params.style_preset).toBe('tilt_sticker');
+    expect(effectById('x_3d')!.default_params.style_preset).toBe('gradient_block');
+    expect(effectById('x_glow')!.default_params.style_preset).toBe('neon_box');
+    expect(effectById('x_gradient')!.default_params.style_preset).toBe('gradient_block');
+    expect(effectById('x_tilt_sticker')!.default_params.style_preset).toBe('tilt_sticker');
+    // x_pop takes the look the chooser gives it (a look bound here would put every other look back, rule 13)
+    expect(effectById('x_pop')!.default_params).not.toHaveProperty('style_preset');
   });
 });

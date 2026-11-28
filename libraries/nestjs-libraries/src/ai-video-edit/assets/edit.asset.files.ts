@@ -1,10 +1,12 @@
 // AI video editing (ai.video-editing), assets (spec section 15): the pure parts of getting icon and mp4 clip files and
 // sound urls into a plan: which slots are searched and with what, what a downloaded file must be, the object key it is
 // stored under, the plan's sound entries and the entries a plan really uses. No Nest, network or storage import.
-import { EditLevel, LEVEL_RULES, Plan, PlanAsset } from '../contract/edit.contract';
+import { EditLevel, Plan, PlanAsset } from '../contract/edit.contract';
 import { SOUND_IDS } from '../contract/edit.sounds';
 import { SlotScores } from '../core/edit.assembler';
-import { HOOK_SLOT_ID, Slot } from '../core/edit.slots';
+import { Direction, iconTier } from '../core/edit.moments';
+import { budgetFor } from '../core/edit.rules';
+import { HOOK_SLOT_ID, Slot, priority } from '../core/edit.slots';
 import { WrittenTexts } from '../core/edit.texts';
 
 // The largest file taken for an icon image or an mp4 clip (a bigger one is not a short overlay).
@@ -152,23 +154,39 @@ const searchable = (keyword: string) => {
     : undefined;
 };
 
-// What is searched for which slot: at most twice the level's icon budget (the plan keeps the best that fit), the best
-// scored slots first; a slot perception said to leave plain is skipped. The writer's icon query wins, else the slot's
-// own keyword when it is English. A level without icons searches nothing.
+// What is searched for which slot: at most twice the level's icon budget for the video's duration (the calm budget in a calm
+// video; the plan keeps the best that fit). First the slots the writer gave an icon query, then the rest in the order the
+// assembler walks them (`priority`, then start), so the slots searched are the ones the assembler reaches first; a slot
+// perception said to leave plain is skipped. In a calm video only the slots the assembler may put an icon on are searched,
+// labelled sentences before plain ones (`iconTier`). When the writer ran, only its queries are searched (a slot it gave
+// none meant none); when it did not run or failed (`written` undefined), the slot's own keyword is searched when it is
+// English. A level without icons searches nothing.
 export const iconQueries = (
   slots: Slot[],
   level: EditLevel,
+  durationMs: number,
   scores?: SlotScores,
-  written?: WrittenTexts
+  written?: WrittenTexts,
+  direction?: Direction
 ): Record<string, string> => {
-  const limit = 2 * LEVEL_RULES[level].max_icons;
+  const limit = 2 * budgetFor(level, durationMs, direction?.style).icons;
   const out: Record<string, string> = {};
   if (!limit) return out;
-  const ranked = [...slots].sort((a, b) => b.score - a.score || a.start_ms - b.start_ms);
+  const asked = (slot: Slot) => Number(!!written?.icon_queries?.[slot.id]);
+  const tier = (slot: Slot) => iconTier(direction, slot.word_index);
+  const ranked = slots
+    .filter((s) => tier(s) < 2)
+    .sort(
+      (a, b) =>
+        tier(a) - tier(b) ||
+        asked(b) - asked(a) ||
+        priority(b, scores?.emphasis) - priority(a, scores?.emphasis) ||
+        a.start_ms - b.start_ms
+    );
   for (const slot of ranked) {
     if (Object.keys(out).length >= limit) break;
     if (scores?.family?.[slot.id] === 'none') continue;
-    const query = written?.icon_queries?.[slot.id] || searchable(slot.keyword || '');
+    const query = written ? written.icon_queries?.[slot.id] : searchable(slot.keyword || '');
     if (query) out[slot.id] = query;
   }
   return out;

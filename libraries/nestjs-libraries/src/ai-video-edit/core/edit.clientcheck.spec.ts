@@ -140,6 +140,8 @@ describe('ai.video-editing: client check', () => {
 
   describe('the feature gate (card S9)', () => {
     const sticker = () => plan([text('t1', 'KEYBOARD')]);
+    // the test look table gates label_pill (the look the planner may use that needs no feature of its own)
+    const gated = () => plan([text('t1', 'KEYBOARD', {}, GATED_LOOK_ID)]);
 
     it('finds nothing when no capabilities are given, or the phone lists the look and no feature the shipped looks need', () => {
       expect(check(sticker())).toEqual([]);
@@ -157,7 +159,7 @@ describe('ai.video-editing: client check', () => {
 
     it('finds a look whose feature the phone did not list, whether the list is absent, null or empty', () => {
       for (const text_features of [undefined, null, [], ['opacity']]) {
-        const results = check(sticker(), {
+        const results = check(gated(), {
           capabilities: { text_styles: FULL_CAPABILITIES.text_styles, text_features },
           looks: GATED_LOOKS,
         });
@@ -169,7 +171,7 @@ describe('ai.video-editing: client check', () => {
 
     it('holds the look once the phone lists its feature', () => {
       const capabilities = { text_styles: FULL_CAPABILITIES.text_styles, text_features: [GATED_LOOK_FEATURE] };
-      expect(check(sticker(), { capabilities, looks: GATED_LOOKS })).toEqual([]);
+      expect(check(gated(), { capabilities, looks: GATED_LOOKS })).toEqual([]);
     });
   });
 

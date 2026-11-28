@@ -76,4 +76,26 @@ describe('ai.video-editing: OpenaiService usage (L7)', () => {
 
     expect(usage[0]).toMatchObject({ input_tokens: 10, output_tokens: 2, estimated: false, ok: true });
   });
+
+  it('asks the director for its schema and records the call, also when the model refuses or the call fails', async () => {
+    const direction = { style: 'lively', labels: [{ id: 's1', label: 'claim' }] };
+    mockParse.mockResolvedValueOnce({
+      model: 'gpt-5.1',
+      usage: { prompt_tokens: 50, completion_tokens: 7 },
+      choices: [{ message: { parsed: direction } }],
+    });
+    const usage: any[] = [];
+
+    expect(await new OpenaiService().directEdit('gpt-5.1', 'low', MESSAGES, usage)).toEqual(direction);
+    expect(mockParse.mock.calls[0][0]).toMatchObject({ model: 'gpt-5.1', reasoning_effort: 'low', messages: MESSAGES });
+
+    mockParse.mockResolvedValueOnce({ model: 'gpt-5.1', choices: [{ message: { parsed: null } }] });
+    expect(await new OpenaiService().directEdit('gpt-5.1', 'low', MESSAGES, usage)).toBeNull();
+
+    mockParse.mockRejectedValueOnce(new Error('provider 500'));
+    await expect(new OpenaiService().directEdit('gpt-5.1', 'low', MESSAGES, usage)).rejects.toThrow('provider 500');
+
+    expect(usage.map((u) => u.ok)).toEqual([true, true, false]);
+    expect(usage[0]).toMatchObject({ input_tokens: 50, output_tokens: 7, estimated: false });
+  });
 });

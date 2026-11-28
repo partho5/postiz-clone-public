@@ -65,6 +65,190 @@ describe('MuseChatService', () => {
     });
   });
 
+  // Calls of the AI edit decisions (ai.video-editing). Synthetic words only; no prompt or answer is real.
+  describe('AI edit decision calls', () => {
+    const EDIT_MESSAGES = [
+      { role: 'system' as const, content: 'rule one' },
+      { role: 'user' as const, content: 'alpha beta' },
+    ];
+    const edit = (parsed: unknown, extra: Record<string, unknown> = {}) => ({
+      model: 'muse-spark-1.3-contributor-0001',
+      choices: [{ message: { parsed, ...extra } }],
+      usage: {
+        prompt_tokens: 900,
+        completion_tokens: 40,
+        prompt_tokens_details: { cached_tokens: 512 },
+      },
+    });
+
+    it('sends system as developer, the effort, the cache key, the cap and the edit timeout', async () => {
+      parse.mockResolvedValue(edit({ slots: [] }));
+
+      await service.writeEditTexts(
+        'muse-spark-1.3-contributor',
+        'high',
+        EDIT_MESSAGES
+      );
+
+      const [body, options] = parse.mock.calls[0];
+      expect(body).toMatchObject({
+        model: 'muse-spark-1.3-contributor',
+        reasoning_effort: 'high',
+        max_completion_tokens: MUSE_CHAT_MAX_COMPLETION_TOKENS,
+        messages: [
+          { role: 'developer', content: 'rule one' },
+          { role: 'user', content: 'alpha beta' },
+        ],
+        prompt_cache_key: 'ai-edit:editTextsPrompt',
+      });
+      expect(body.response_format.type).toBe('json_schema');
+      expect(body.response_format.json_schema.name).toBe('editTextsPrompt');
+      expect(options).toEqual({ timeout: 120_000, maxRetries: 1 });
+    });
+
+    it('keys the icon picker to its own cache and schema name', async () => {
+      parse.mockResolvedValue(edit({ picks: [] }));
+
+      await service.pickEditIcons('m', 'medium', EDIT_MESSAGES);
+
+      const [body] = parse.mock.calls[0];
+      expect(body.prompt_cache_key).toBe('ai-edit:iconPicksPrompt');
+      expect(body.response_format.json_schema.name).toBe('iconPicksPrompt');
+      expect(body.reasoning_effort).toBe('medium');
+    });
+
+    it('reads an empty icon_query as null and keeps a filled one', async () => {
+      parse.mockResolvedValue(
+        edit({
+          slots: [
+            { id: 'h1', text: 'Alpha', icon_query: '' },
+            { id: 'h2', text: 'Beta', icon_query: '  ' },
+            { id: 'h3', text: 'Gamma', icon_query: 'small green door' },
+          ],
+        })
+      );
+
+      expect(
+        await service.writeEditTexts('m', 'high', EDIT_MESSAGES)
+      ).toEqual({
+        slots: [
+          { id: 'h1', text: 'Alpha', icon_query: null },
+          { id: 'h2', text: 'Beta', icon_query: null },
+          { id: 'h3', text: 'Gamma', icon_query: 'small green door' },
+        ],
+      });
+    });
+
+    it('reads an empty uuid as null and keeps a filled one', async () => {
+      parse.mockResolvedValue(
+        edit({
+          picks: [
+            { id: 's1', uuid: '' },
+            { id: 's2', uuid: 'abc-1' },
+          ],
+        })
+      );
+
+      expect(await service.pickEditIcons('m', 'high', EDIT_MESSAGES)).toEqual({
+        picks: [
+          { id: 's1', uuid: null },
+          { id: 's2', uuid: 'abc-1' },
+        ],
+      });
+    });
+
+    it('answers null for a refusal and for no parsed answer, and still records the call', async () => {
+      const usage: any[] = [];
+      parse.mockResolvedValueOnce(
+        edit({ slots: [] }, { refusal: 'cannot help' })
+      );
+      expect(
+        await service.writeEditTexts('m', 'high', EDIT_MESSAGES, usage)
+      ).toBeNull();
+
+      parse.mockResolvedValueOnce(edit(null));
+      expect(
+        await service.pickEditIcons('m', 'high', EDIT_MESSAGES, usage)
+      ).toBeNull();
+
+      expect(usage).toHaveLength(2);
+      expect(usage.every((u) => u.ok)).toBe(true);
+    });
+
+    it('pushes the usage of a finished call with the model the answer reports', async () => {
+      parse.mockResolvedValue(edit({ picks: [] }));
+      const usage: any[] = [];
+
+      await service.pickEditIcons('muse-spark-1.3-contributor', 'high', EDIT_MESSAGES, usage);
+
+      expect(usage).toHaveLength(1);
+      expect(usage[0]).toMatchObject({
+        model: 'muse-spark-1.3-contributor-0001',
+        input_tokens: 900,
+        output_tokens: 40,
+        cached_tokens: 512,
+        estimated: false,
+        ok: true,
+      });
+    });
+
+    it('pushes a failed, estimated call and rethrows when Meta fails', async () => {
+      parse.mockRejectedValue(
+        new OpenAI.APIError(500, { message: 'down' }, 'down', new Headers())
+      );
+      const usage: any[] = [];
+
+      await expect(
+        service.writeEditTexts('m', 'high', EDIT_MESSAGES, usage)
+      ).rejects.toBeInstanceOf(OpenAI.APIError);
+
+      expect(usage).toHaveLength(1);
+      expect(usage[0]).toMatchObject({
+        model: 'm',
+        estimated: true,
+        ok: false,
+        output_tokens: 0,
+      });
+    });
+
+    it('works without a usage array', async () => {
+      parse.mockResolvedValue(edit({ picks: [] }));
+
+      await expect(
+        service.pickEditIcons('m', 'high', EDIT_MESSAGES)
+      ).resolves.toEqual({ picks: [] });
+    });
+
+    it('asks the director with its own cache key and schema name, and returns the answer as it is', async () => {
+      const direction = { style: 'calm', labels: [{ id: 's1', label: 'hook' }] };
+      parse.mockResolvedValue(edit(direction));
+      const usage: any[] = [];
+
+      expect(
+        await service.directEdit('muse-spark-1.3-contributor', 'high', EDIT_MESSAGES, usage)
+      ).toEqual(direction);
+
+      const [body] = parse.mock.calls[0];
+      expect(body.prompt_cache_key).toBe('ai-edit:editDirectionPrompt');
+      expect(body.response_format.json_schema.name).toBe('editDirectionPrompt');
+      expect(body.reasoning_effort).toBe('high');
+      expect(body.messages[0]).toEqual({ role: 'developer', content: 'rule one' });
+      expect(usage).toHaveLength(1);
+      expect(usage[0]).toMatchObject({ input_tokens: 900, output_tokens: 40, ok: true });
+    });
+
+    it('answers null for a director refusal and records a failed director call', async () => {
+      const usage: any[] = [];
+      parse.mockResolvedValueOnce(edit({ style: 'calm', labels: [] }, { refusal: 'no' }));
+      expect(await service.directEdit('m', 'high', EDIT_MESSAGES, usage)).toBeNull();
+
+      parse.mockRejectedValueOnce(new OpenAI.APIError(500, { message: 'down' }, 'down', new Headers()));
+      await expect(service.directEdit('m', 'high', EDIT_MESSAGES, usage)).rejects.toBeInstanceOf(OpenAI.APIError);
+
+      expect(usage.map((u) => u.ok)).toEqual([true, false]);
+    });
+  });
+
   describe('writePlanPart', () => {
     it('sends the model, the effort, the token cap, a json_schema format and the cache hints', async () => {
       await service.writePlanPart(

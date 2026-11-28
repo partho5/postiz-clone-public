@@ -4,6 +4,7 @@
 import { isDeepStrictEqual } from 'util';
 import { EditLevel, EditRequest, EditWord, Palette, Plan, PlanAsset } from '../contract/edit.contract';
 import { AssembleAssets, SlotScores, SlotTexts } from './edit.assembler';
+import { Direction } from './edit.moments';
 import { PlanEditInput, planAndValidate } from './edit.pipeline';
 
 // The part of a bundle the replay reads: its edit, its steps and the served body.
@@ -84,6 +85,7 @@ export const replayInput = (bundle: ReplayBundle): PlanEditInput => {
     words: p.words as EditWord[],
     palette: p.palette as unknown as Palette,
     scores: (p.scores as SlotScores | undefined) ?? undefined,
+    direction: (p.direction as Direction | undefined) ?? undefined,
     texts: (p.texts as SlotTexts | undefined) ?? undefined,
     assets: (p.assets as AssembleAssets | undefined) ?? undefined,
     planAssets: (p.plan_assets as PlanAsset[] | undefined) ?? undefined,

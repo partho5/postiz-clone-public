@@ -31,6 +31,7 @@ export interface AiVideoEditChanges {
   words?: Prisma.InputJsonValue;
   scores?: Prisma.InputJsonValue;
   texts?: Prisma.InputJsonValue;
+  moments?: Prisma.InputJsonValue;
   plan?: Prisma.InputJsonValue;
   assets?: Prisma.InputJsonValue;
   delivered?: Prisma.InputJsonValue;

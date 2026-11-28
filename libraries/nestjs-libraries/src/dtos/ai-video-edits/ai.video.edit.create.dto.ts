@@ -51,6 +51,12 @@ const CAPABILITY_NAME = /^[a-z0-9_]{1,64}$/;
 // The kinds of an activity entry.
 const ACTIVITY_TYPES = ['brush', 'board_show', 'board_hide', 'slide_change', 'motion'];
 
+// The kinds of a chapter (the slide's main content).
+const CHAPTER_KINDS = ['text', 'image', 'other'];
+
+// Most chapters one request may carry.
+export const AI_EDIT_MAX_CHAPTERS = 50;
+
 // Exactly one of `aiCaptionId` and `audioUploadId` names where the words come from.
 @ValidatorConstraint({ name: 'oneTranscriptSource' })
 class OneTranscriptSource implements ValidatorConstraintInterface {
@@ -125,7 +131,7 @@ export class AiEditCaptionBandDto {
   y1: number;
 }
 
-// One output the user enabled: its ratio, its crop of the master and its caption band.
+// One output the user enabled: its ratio, its crop of the master and its caption band (none when it shows no captions).
 export class AiEditOutputDto {
   @IsIn(OUTPUT_RATIOS)
   ratio: '9:16' | '4:5' | '1:1';
@@ -135,10 +141,10 @@ export class AiEditOutputDto {
   @ValidateNested()
   crop: AiEditRectDto;
 
-  @IsDefined()
+  @IsOptional()
   @Type(() => AiEditCaptionBandDto)
   @ValidateNested()
-  caption_band: AiEditCaptionBandDto;
+  caption_band?: AiEditCaptionBandDto;
 }
 
 // One place of the facecam: centre as fractions of the master, radius as a fraction of its width.
@@ -227,6 +233,32 @@ export class AiEditCapabilitiesDto {
   text_features?: string[];
 }
 
+// One slide of the recording (a new slide, a topic change): when it starts, what it holds and (optional) its content box.
+export class AiEditChapterDto {
+  @IsInt()
+  @Min(0)
+  start_ms: number;
+
+  @IsIn(CHAPTER_KINDS)
+  kind: 'text' | 'image' | 'other';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  note?: string;
+
+  // the slide's title or image box, as fractions of the master frame
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AiEditRectDto)
+  region?: AiEditRectDto;
+}
+
 // The user's switches.
 export class AiEditOptionsDto {
   @IsBoolean()
@@ -280,6 +312,14 @@ export class AiEditRequestDto {
   @Type(() => AiEditOptionsDto)
   @ValidateNested()
   options: AiEditOptionsDto;
+
+  // the slides of the recording; absent from older phones
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(AI_EDIT_MAX_CHAPTERS)
+  @Type(() => AiEditChapterDto)
+  @ValidateNested({ each: true })
+  chapters?: AiEditChapterDto[];
 }
 
 // One AI edit of a recording at one level: where its words come from (a READY caption of the recording, else a

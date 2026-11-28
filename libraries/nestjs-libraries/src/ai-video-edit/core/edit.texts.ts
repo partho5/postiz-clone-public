@@ -3,10 +3,10 @@
 // the asset resolver will search). The writer may be wrong or down: every text is cleaned, a banned word drops its
 // text, and with no text the plan falls back to Standard's keyword echoes and phrases. Pure functions, no Nest or
 // network import; the call itself is `EditLlmService.writeEditTexts`.
-import { LEVEL_RULES, EditLevel } from '../contract/edit.contract';
+import { EditLevel } from '../contract/edit.contract';
 import { SlotScores, SlotTexts } from './edit.assembler';
-import { capText } from './edit.rules';
-import { HOOK_SLOT_ID, Slot } from './edit.slots';
+import { budgetFor, capText } from './edit.rules';
+import { HOOK_SLOT_ID, Slot, priority } from './edit.slots';
 import { hasBanned } from './edit.validator';
 
 // What the writer wrote, kept on the job: the assembler's texts plus the icon search query per slot id.
@@ -22,21 +22,20 @@ export interface WriterAnswer {
 // The most icon query words (English, a short scene).
 const MAX_QUERY_WORDS = 6;
 
-// The slots the writer is asked about: the hook slot, then the best scored (words perception stressed count double)
-// up to twice the level's feature budget; a slot perception said to leave plain is not asked.
+// The slots the writer is asked about: the hook slot, then the best by `priority` (words perception stressed count
+// double) up to twice the feature budget of the video's duration; a slot perception said to leave plain is not asked.
 export const writerSlots = (
   slots: Slot[],
   level: EditLevel,
+  durationMs: number,
   scores?: SlotScores
 ): Slot[] => {
-  const priority = (s: Slot) =>
-    s.score + 2 * (scores?.emphasis?.[s.word_index] || 0);
   const plain = (id: string) => scores?.family?.[id] === 'none';
   const hook = slots.filter((s) => s.id === HOOK_SLOT_ID);
   const rest = slots
     .filter((s) => s.id !== HOOK_SLOT_ID && !plain(s.id))
-    .sort((a, b) => priority(b) - priority(a) || a.start_ms - b.start_ms)
-    .slice(0, 2 * LEVEL_RULES[level].max_feature_effects);
+    .sort((a, b) => priority(b, scores?.emphasis) - priority(a, scores?.emphasis) || a.start_ms - b.start_ms)
+    .slice(0, 2 * budgetFor(level, durationMs).features);
   return [...hook, ...rest];
 };
 

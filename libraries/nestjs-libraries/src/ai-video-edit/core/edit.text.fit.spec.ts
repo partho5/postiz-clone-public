@@ -387,12 +387,17 @@ describe('ai.video-editing: text budget and fit', () => {
   describe('the planner', () => {
     const ENGLISH = GOLDEN_FIXTURES.filter((f) => f.name.startsWith('english'));
 
-    // The texts of the styled text items a fixture's plan carries, planned in a language.
+    // The texts of the styled text items a fixture's plan carries, planned in a language. The outputs have no caption
+    // band (no captions), so the plan holds keyword echoes (TS9c: with captions on there are none).
     const textsOf = (f: GoldenFixture, language: string, level: EditLevel) =>
       planEdit({
         sessionId: 'strings',
         level,
-        request: { ...goldenRequest(f), language },
+        request: {
+          ...goldenRequest(f),
+          language,
+          outputs: goldenRequest(f).outputs.map((o) => ({ ratio: o.ratio, crop: o.crop })),
+        },
         words: toEditWords(f.words),
         palette: MULTI_PALETTE,
       }).plan.items.flatMap((i) => (i.component && i.component.type === 'styled_text' ? [i.component.text] : []));

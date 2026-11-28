@@ -11,7 +11,8 @@ import {
   PlanAsset,
 } from '../contract/edit.contract';
 import { AssembleAssets, SlotScores, SlotTexts, assemble } from './edit.assembler';
-import { PlanDecisions, cutDecisions, slotCandidates, spanDecisions } from './edit.decisions';
+import { PlanDecisions, SlotDecision, cutDecisions, slotCandidates, spanDecisions } from './edit.decisions';
+import { Direction, anchorDirection, contentKeepouts } from './edit.moments';
 import { cutPoints } from './edit.rules';
 import { candidateSlots } from './edit.slots';
 import {
@@ -35,17 +36,38 @@ export interface PlanEditInput {
   scores?: SlotScores;
   texts?: SlotTexts;
   assets?: AssembleAssets;
+  // The director's direction as kept (`edit.moments`, on the SOURCE timeline); `planEdit` lays it on the output timeline.
+  // None or `source: 'none'`: the plan is made without a director.
+  direction?: Direction | null;
   // The asset list the plan carries, when assets were resolved.
   planAssets?: PlanAsset[];
   bannedWords?: string[];
 }
 
+// A pause inside a sentence is cut only from this long in a calm video (a pause after a sentence's end is cut as ever).
+const CALM_INSIDE_SENTENCE_MS = 1000;
+
 // The planner's timing half: the output timeline and the candidate slots on it. Perception asks about the same
-// slots the assembler then plans on, so both read them from here.
-const structure = (request: EditRequest, words: EditWord[]) => {
+// slots the assembler then plans on, so both read them from here. A calm direction (SOURCE times) keeps the cuts at
+// the sentence ends: its sentence ends are the last words of its sentence moments; any other case cuts as before.
+const structure = (request: EditRequest, words: EditWord[], direction?: Direction | null) => {
   const duration = request.video.duration_ms;
   const spans = protectedSpans(request.activity_map, duration);
-  const cuts = silenceCuts(words, spans, { durationMs: duration });
+  const calm =
+    direction && direction.source === 'director' && direction.style === 'calm' && Array.isArray(direction.moments)
+      ? direction
+      : undefined;
+  const cuts = silenceCuts(words, spans, {
+    durationMs: duration,
+    ...(calm
+      ? {
+          sentenceEnds: new Set(
+            calm.moments.filter((m) => m.kind === 'sentence').map((m) => m.word_to as number)
+          ),
+          minInsideMs: CALM_INSIDE_SENTENCE_MS,
+        }
+      : {}),
+  });
   const map = buildMap(duration, cuts, []);
   const outWords = remapWords(words, map);
   const outActivity = remapEntries(request.activity_map, map);
@@ -69,15 +91,37 @@ const structure = (request: EditRequest, words: EditWord[]) => {
   return { spans, cuts, map, outWords, windows, facecam, slots, decisions };
 };
 
-// What perception asks about: the output words (indexed like the plan's), the candidate slots on them, and the
-// source start of each output word (the proxy pieces are cut from the source).
-export const perceptionTargets = (request: EditRequest, words: EditWord[]) => {
-  const { map, outWords, slots } = structure(request, words);
+// What perception asks about: the output words (indexed like the plan's), the candidate slots on them, the
+// source start of each output word (the proxy pieces are cut from the source), the output duration and the direction
+// laid on the output timeline (the one the assembler gets, undefined without a director).
+// `direction` is the one `planEdit` gets, so perception asks about the slots the plan will have.
+export const perceptionTargets = (request: EditRequest, words: EditWord[], direction?: Direction | null) => {
+  const { map, outWords, slots } = structure(request, words, direction);
   // an output word is a kept source word, in the same order
   const sourceMs = words
     .filter((w) => remapWords([w], map).length === 1)
     .map((w) => w.start_ms);
-  return { words: outWords, slots, sourceMs };
+  return {
+    words: outWords,
+    slots,
+    sourceMs,
+    durationMs: map.output_duration_ms,
+    direction: anchorDirection(direction, words, outWords, map),
+  };
+};
+
+// The ids of the two items (facecam and video) each drawing moment placed, from the assembler's decisions: the validator lets
+// such a pair share time (rule 18).
+const drawingPairs = (decisions: SlotDecision[] = []): [string, string][] => {
+  const byMoment = new Map<string, string[]>();
+  for (const d of decisions) {
+    const { moment_id: moment, label, item_id: item } = d.inputs;
+    if (d.decision !== 'kept' || label !== 'drawing' || typeof moment !== 'string' || typeof item !== 'string') continue;
+    byMoment.set(moment, [...(byMoment.get(moment) || []), item]);
+  }
+  return Array.from(byMoment.values())
+    .filter((ids) => ids.length === 2)
+    .map((ids) => [ids[0], ids[1]]);
 };
 
 // Builds the plan before validation and the context the validator needs for it; `decisions` is what the structure and
@@ -89,15 +133,25 @@ export const planEdit = (
   const duration = request.video.duration_ms;
   const { spans, cuts, map, outWords, windows, facecam, slots, decisions: structured } = structure(
     request,
-    words
+    words,
+    input.direction
   );
-  const { items, captions, decisions: assembled } = assemble({
+  // the ink and the slide title (source times in the request) laid on the output timeline: texts and icons keep off them
+  const keepouts = contentKeepouts(request.activity_map, request.chapters, map);
+  const {
+    items,
+    captions,
+    decisions: assembled,
+    icon_misses: iconMisses,
+    direction: directed,
+  } = assemble({
     level,
     words: outWords,
     windows,
     slots,
     outputs: request.outputs,
     facecam,
+    keepouts,
     durationMs: map.output_duration_ms,
     video: request.video,
     cutPoints: cutPoints(map),
@@ -108,6 +162,7 @@ export const planEdit = (
     scores: input.scores,
     texts: input.texts,
     assets: input.assets,
+    direction: anchorDirection(input.direction, words, outWords, map),
   });
   const plan: Plan = {
     contract_version: CONTRACT_VERSION,
@@ -124,7 +179,12 @@ export const planEdit = (
   };
   return {
     plan,
-    decisions: { structure: structured, assemble: assembled || [] },
+    decisions: {
+      structure: structured,
+      assemble: assembled || [],
+      icon_misses: iconMisses || {},
+      ...(directed ? { direction: directed } : {}),
+    },
     context: {
       request,
       words: outWords,
@@ -133,6 +193,8 @@ export const planEdit = (
       source_duration_ms: duration,
       assets: input.planAssets,
       banned_words: input.bannedWords,
+      drawing_pairs: drawingPairs(assembled),
+      keepouts,
     },
   };
 };
